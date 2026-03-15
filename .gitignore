@@ -20,3 +20,6 @@ __pycache__/
 .env
 .ipynb_checkpoints/
 .vscode/
+
+# --- Journal Articles ---
+adapt_rl/references/ADAPT-RL.pdf
