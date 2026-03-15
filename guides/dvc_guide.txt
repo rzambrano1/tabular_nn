@@ -1,0 +1,3 @@
+DVC [Data Version Control] was installed using pipx. It is available globally outside the environment.
+
+The PATH needs update after install. Run >$env:PATH += ";$env:USERPROFILE\.local\bin"

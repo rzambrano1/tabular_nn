@@ -1,0 +1,8 @@
+HARDWARE CHECK
+--------------
+
+`nvidia-smi`: maximum version of CUDA INSTALLED NVIDIA GPU driver supports
+
+SOFTWARE CHECK
+
+`nvcc --version`: version of the CUDA Toolkit (the compiler) is actually installed

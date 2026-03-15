@@ -1,0 +1,22 @@
+# --- DATA & MODELS ---
+# Ignore all CSVs and Parquets (usually too big for GitHub)
+*.csv
+*.parquet
+data/
+outputs/
+models/
+*.pt
+*.pth
+
+# --- PYTHON ---
+# Ignore the virtual environment
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# --- CONFIG & SECRETS ---
+.env
+.ipynb_checkpoints/
+.vscode/
