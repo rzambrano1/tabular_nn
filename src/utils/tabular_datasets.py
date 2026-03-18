@@ -33,7 +33,7 @@ import pandas as pd
 # Local Modules
 # -------------
 
-from argn_encoder_decoder import encode_categorical
+from .argn_encoder_decoder import encode_categorical, generate_categorical_encoding_mappings, generate_categorical_decoding_mappings
 
 #########################
 # Functions and Classes #
@@ -84,9 +84,9 @@ class argn_dataset(tabular_dataset_protocol):
 
     @property
     def table(self):
-        return self._table
+        return self._table.to_pandas()
         
-    def load_data(self, df_pd: pd.DataFrame) -> pd.DataFrame:
+    def load_data(self, df_pd: pd.DataFrame) -> pl.DataFrame:
         """
         Preprocess _raw_data. The data frame is casted into polars for fast transformation.
         Converting a the polars oject back into pandas is nearly instantaneus because they  
@@ -104,32 +104,55 @@ class argn_dataset(tabular_dataset_protocol):
 
         df_pl = pl.from_pandas(df_pd).clone()
 
+        # Data fraame dimensions
         self.nrow = df_pl.height
         
-        self.col_names = df_pl.columns
-
-        self.ncol = len(self.col_names)
+        self.ncol = df_pl.width
 
         self.table_dim = (self.nrow, self.ncol)
 
+        # Data frame column name and data types
+        self.col_names = df_pl.columns
+
         self.dtypes = [str(df_pl[name].dtype) for name in self.col_names]
 
+        # Data frame metadata
+        (self._categorical_columns,
+        self._numerical_discrete_columns,
+        self._float_columns_to_cast_to_integer,
+        self._numerical_float_columns,
+        self._datetime_columns,
+        self._bool_columns,
+        self._incompatible_columns) = column_types_sieve(df_pl, self.dtypes, self.col_names)
+
+        # Casting into Int64 float columns that contain integers
+        for col, _ in self._float_columns_to_cast_to_integer:
+            df_pl = df_pl.with_columns(
+                    pl.col(col).cast(pl.Int64, strict=True)
+                    )
+            
+        # Removing non-compatible columns
+
         # Generating mappings for categorial values coded as strings
-        self.categorical_encoding_maps, self.categorical_cols = generate_categorical_encoding_mappings(self.dtypes, self.col_names, df_pl, self.nrow)
+        self.categorical_encoding_maps = generate_categorical_encoding_mappings(df_pl, self._categorical_columns, self.nrow)
 
         self.categorical_decoding_maps = generate_categorical_decoding_mappings(self.categorical_encoding_maps)
 
         df_pl = self.argn_preprocessing(
             df_pl,
             self.categorical_encoding_maps, 
-            self.categorical_cols
+            self._categorical_columns
             # Need to add parameters to preprocess float, integer, datetime types
             )
 
-        return df_pl.to_pandas()
+        return df_pl
 
         
-    def argn_preprocessing(self, df_pl: pl.DataFrame, encode_map:dict[dict[str,int]], cat_cols:list[str]) -> pl.DataFrame:
+    def argn_preprocessing(
+            self, df_pl: pl.DataFrame, 
+            encode_map:dict[dict[str,int]], 
+            cat_cols:list[str]
+            ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
         specifications, listed in Appendix A of the paper:
@@ -149,12 +172,13 @@ class argn_dataset(tabular_dataset_protocol):
             A list of columns with categorical variables coded as strings
         """
 
-        # Rare categorical mapping not implemented yet
+        # Rare categorical, geospatial, and text mapping not implemented yet
 
         # Recoding columns with categorial values coded as strings
-
         if len(cat_cols) > 0:
-            df_pl = encode_categorical(df_pl, encode_map, cat_cols)
+            df_pl = encode_categorical(df_pl, encode_map, [item[0] for item in cat_cols])
+        
+        # Casting float columns with discrete values as Int64
 
         # Recoding columns with integer data types
 
@@ -165,89 +189,85 @@ class argn_dataset(tabular_dataset_protocol):
         return df_pl
 
 
-def generate_categorical_encoding_mappings(df_dtypes:list[str], col_names:list[str], df_pl:pl.DataFrame, nrow:int) -> dict[dict[str,int]]:
+def column_types_sieve(
+        df_pl: pl.DataFrame, 
+        df_dtypes:list[str], 
+        col_names:list[str],  
+        ) -> tuple[
+            list[tuple[str,int]], 
+            list[tuple[str,int]], 
+            list[tuple[str,int]], 
+            list[tuple[str,int]], 
+            list[tuple[str,int]],
+            list[tuple[str,int]],
+            list[tuple[str,int]]
+            ]:
     """
-    Creates a mapping for encoding categorical variables. Assumes columns with string data types are categorical variables
-    coded with levels as strings.
-
-    Note the missing values (null) will be casted as None 
+    Creates list of columns by data type to enable targeted encoding for each column.
 
     Parameters:
     ----------
 
+    df_pl: pl.DataFrame
+        The data frame in the object instance
     df_dtypes : list[str]
-        A list of data types of each column in df_pl
+        A list of the data types 
     col_names : list[str]
-        A list of column names in df_pl
-    df_pl : pl.DataFrame
-        A polars data frame
-    nrow : int
-        Number of rows in df_pl
-
+        A list with the column names
+    
     Returns:
     -------
 
-    categorical_encode_maps : dict[dict[str,int]]
-        A dictionary with dictionaries that map uniques levels to integers
-    categorical_columns : list[str]
-        A list of columns with categorical strings
-
-    Warns:
-    -----
-
-    Warning:
-        If the number of levels in a given column are more than a third of the number of 
-        rows, the client receives a warning to make sure a column with open ended text 
-        was not passed to the model.
-
+    A tuple with seven lists of tuples
+        Each list contains information the names of the columns and its column number
     """
-    
-    categorical_encode_maps = {}
+
+    # Supported data types
+    cat_types = ["String", "Categorical", "Categories", "Enum", "Utf8"]
+    int_types = ["Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64"]
+    float_types = ["Float16", "Float32", "Float64"]
+    datetime_types = ["Date", "Time", "Datetime", "Duration"]
+    bool_types = ["Boolean"]
+
+    # Not supported data types
+    not_compatiple_types = ["Binary", "List", "Array", "Struct"]
+
     categorical_columns = []
-
-    for i,dtype in enumerate(df_dtypes):
-        if dtype in ["String", "Categorical", "Categories", "Enum", "Utf8"]:
-
-            unique_vals = df_pl[:, i].unique().to_list()
-            col = col_names[i]
-            
-            categorical_columns.append(col)
-            if len(unique_vals) > nrow/3:
-                warnings.warn(f"Check {col} does not contain open ended values. This implementation only process categorical levels...")
-
-            map_name = col
-
-            categorical_encode_maps[map_name] = {
-                val: idx for idx, val in enumerate(unique_vals)
-            }
-
-    return categorical_encode_maps, categorical_columns
-
-
-def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
-    """
-    Assumes a mapping for encoding categorical variables. Returns a mapping for decoding categorical
-    variables back into strings 
-
-    Parameters:
-    ----------
-
-    encode_maps : dict[dict[str,int]]
-        An encoding map generated with generate_categorical_encoding_mappings()
-
-    returns:
-    -------
-
-    decode_map : dict[dict[int,str]]
-        A decoding map to restore encoded data back into its original form
-    """
-
-    decode_map = {
-            outer_key: {v: k for k, v in inner_dict.items()}
-            for outer_key, inner_dict in encode_maps.items()
-        }
+    numerical_discrete_columns = []
+    float_columns_to_cast_to_integer = []
+    numerical_float_columns = []
+    datetime_columns = []
+    bool_columns = []
+    incompatible_columns = []
     
-    return decode_map
+    for i,dtype in enumerate(df_dtypes):
+        if dtype in cat_types:
+            categorical_columns.append((col_names[i],i))
+        elif dtype in int_types:
+            numerical_discrete_columns.append((col_names[i],i))
+        elif dtype in float_types:
+            is_integer = (df_pl[col_names[i]] == df_pl[col_names[i]].floor()).all()
+            if is_integer:
+                float_columns_to_cast_to_integer.append((col_names[i],i))
+                numerical_discrete_columns.append((col_names[i],i))
+            else:
+                numerical_float_columns.append((col_names[i],i))
+        elif dtype in bool_types:
+            bool_columns.append((col_names[i],i))
+        elif dtype in datetime_types:
+            datetime_columns.append((col_names[i],i))
+        elif dtype in not_compatiple_types:
+            incompatible_columns.append((col_names[i],i))
+        else:
+            incompatible_columns.append((col_names[i],i))
 
-        
+    return (
+        categorical_columns,
+        numerical_discrete_columns,
+        float_columns_to_cast_to_integer,
+        numerical_float_columns,
+        datetime_columns,
+        bool_columns,
+        incompatible_columns
+    )  
         
