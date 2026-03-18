@@ -72,11 +72,3 @@ def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_co
 
     return df_pl_encoded
 
-def decode_categorical(encode_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
-
-    decode_map = {
-            outer_key: {v: k for k, v in inner_dict.items()}
-            for outer_key, inner_dict in encode_maps.items()
-        }
-    
-    return decode_map

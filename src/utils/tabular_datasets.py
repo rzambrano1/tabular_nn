@@ -21,6 +21,8 @@ from pathlib import Path
 
 from typing import Protocol
 
+import warnings
+
 # Numerical & Data 
 # ----------------
 
@@ -40,12 +42,6 @@ from argn_encoder_decoder import encode_categorical
 class tabular_dataset_protocol(Protocol):
 
     _raw_data: pd.DataFrame
-
-    @property
-    def table(self):
-        if self._table is None:
-            self._table = self.load_data(self._raw_data)
-        return self._table
     
     def load_data(self, df: pd.DataFrame) -> pd.DataFrame:
         ...
@@ -79,13 +75,17 @@ class argn_dataset(tabular_dataset_protocol):
             If data frame is not pd.DataFrame
 
         """
-        if isinstance(_raw_data, pd.DataFrame) == False:
+        if not isinstance(_raw_data, pd.DataFrame):
             raise TypeError(f"Instances of {self.__class__.__name__} can only be initiated with pandas.DataFrame objects...")
         
         self._raw_data = _raw_data
+        self._table = self.load_data(self._raw_data)
 
-        self.load_data(self._raw_data)
 
+    @property
+    def table(self):
+        return self._table
+        
     def load_data(self, df_pd: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocess _raw_data. The data frame is casted into polars for fast transformation.
@@ -117,10 +117,19 @@ class argn_dataset(tabular_dataset_protocol):
         # Generating mappings for categorial values coded as strings
         self.categorical_encoding_maps, self.categorical_cols = generate_categorical_encoding_mappings(self.dtypes, self.col_names, df_pl, self.nrow)
 
-        self.categorical_decoding_maps = generate_categorical_decoding_mappings(self.categorical_encode_maps)
+        self.categorical_decoding_maps = generate_categorical_decoding_mappings(self.categorical_encoding_maps)
+
+        df_pl = self.argn_preprocessing(
+            df_pl,
+            self.categorical_encoding_maps, 
+            self.categorical_cols
+            # Need to add parameters to preprocess float, integer, datetime types
+            )
+
+        return df_pl.to_pandas()
 
         
-    def argn_preprocessing(df_pl: pl.DataFrame, encode_map:dict[dict[str,int]], cat_cols:list[str]) -> pl.DataFrame:
+    def argn_preprocessing(self, df_pl: pl.DataFrame, encode_map:dict[dict[str,int]], cat_cols:list[str]) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
         specifications, listed in Appendix A of the paper:
@@ -146,6 +155,14 @@ class argn_dataset(tabular_dataset_protocol):
 
         if len(cat_cols) > 0:
             df_pl = encode_categorical(df_pl, encode_map, cat_cols)
+
+        # Recoding columns with integer data types
+
+        # Recoding columns with float data types
+
+        # Recoding columns with datetime data types
+
+        return df_pl
 
 
 def generate_categorical_encoding_mappings(df_dtypes:list[str], col_names:list[str], df_pl:pl.DataFrame, nrow:int) -> dict[dict[str,int]]:
@@ -196,7 +213,7 @@ def generate_categorical_encoding_mappings(df_dtypes:list[str], col_names:list[s
             
             categorical_columns.append(col)
             if len(unique_vals) > nrow/3:
-                Warning(f"Check {col} does not contain open ended values. This implementation only process categorical levels...")
+                warnings.warn(f"Check {col} does not contain open ended values. This implementation only process categorical levels...")
 
             map_name = col
 
