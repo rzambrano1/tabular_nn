@@ -12,23 +12,32 @@ types.
 # Session Setup #
 #################
 
-# ── Standard Library ──────────────────────────────────────────────────────────
+# Standard Library
+# ----------------
+ 
 import os
 import random
 from pathlib import Path
 
 from typing import Protocol
 
-# ── Numerical & Data ──────────────────────────────────────────────────────────
+# Numerical & Data 
+# ----------------
+
 import numpy as np
 import polars as pl
 import pandas as pd
+
+# Local Modules
+# -------------
+
+from argn_encoder_decoder import encode_categorical
 
 #########################
 # Functions and Classes #
 #########################
 
-class tabular_dataset(Protocol):
+class tabular_dataset_protocol(Protocol):
 
     _raw_data: pd.DataFrame
 
@@ -41,7 +50,8 @@ class tabular_dataset(Protocol):
     def load_data(self, df: pd.DataFrame) -> pd.DataFrame:
         ...
 
-class argn_dataset(tabular_dataset):
+
+class argn_dataset(tabular_dataset_protocol):
     """
     An object to store a table of any size with mixed data types.
     
@@ -74,6 +84,8 @@ class argn_dataset(tabular_dataset):
         
         self._raw_data = _raw_data
 
+        self.load_data(self._raw_data)
+
     def load_data(self, df_pd: pd.DataFrame) -> pd.DataFrame:
         """
         Preprocess _raw_data. The data frame is casted into polars for fast transformation.
@@ -103,17 +115,14 @@ class argn_dataset(tabular_dataset):
         self.dtypes = [str(df_pl[name].dtype) for name in self.col_names]
 
         # Generating mappings for categorial values coded as strings
-        self.categorical_encoding_maps, self.categorical_cols = encode_strings(self.dtypes, self.col_names, df_pl, self.nrow)
+        self.categorical_encoding_maps, self.categorical_cols = generate_categorical_encoding_mappings(self.dtypes, self.col_names, df_pl, self.nrow)
 
-        self.categorical_decoding_maps = {
-            outer_key: {v: k for k, v in inner_dict.items()}
-            for outer_key, inner_dict in self.categorical_encode_maps.items()
-        }
+        self.categorical_decoding_maps = generate_categorical_decoding_mappings(self.categorical_encode_maps)
 
         
     def argn_preprocessing(df_pl: pl.DataFrame, encode_map:dict[dict[str,int]], cat_cols:list[str]) -> pl.DataFrame:
         """
-        Helper function to preprocess a polars data frame in accordance to tabularARGN
+        Method to preprocess a polars data frame in accordance to tabularARGN
         specifications, listed in Appendix A of the paper:
 
         TabularARGN models exclusively operate on categorical columns, all other data 
@@ -139,9 +148,9 @@ class argn_dataset(tabular_dataset):
             df_pl = encode_categorical(df_pl, encode_map, cat_cols)
 
 
-def encode_strings(df_dtypes:list[str], col_names:list[str], df_pl:pl.DataFrame, nrow:int) -> dict[dict[str,int]]:
+def generate_categorical_encoding_mappings(df_dtypes:list[str], col_names:list[str], df_pl:pl.DataFrame, nrow:int) -> dict[dict[str,int]]:
     """
-    Creates a mapping for categorical variables. Assumes columns with string data types are categorical variables
+    Creates a mapping for encoding categorical variables. Assumes columns with string data types are categorical variables
     coded with levels as strings.
 
     Note the missing values (null) will be casted as None 
@@ -198,42 +207,30 @@ def encode_strings(df_dtypes:list[str], col_names:list[str], df_pl:pl.DataFrame,
     return categorical_encode_maps, categorical_columns
 
 
-def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_cols:list[str]):
+def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
     """
-    Assumes a polars data frame and transform the categorical columns into integer levels.
+    Assumes a mapping for encoding categorical variables. Returns a mapping for decoding categorical
+    variables back into strings 
 
     Parameters:
     ----------
 
-    df_pl : pl.DataFrame
-        A polars data frame with categorical data encoded as strings
-    
-    encode_map : dict[dict[str,int]] 
-        A dict of dicts with encoding mapping of string levels into integer levels
-    
-    cat_cols : list[str]
-        List of columns to encode
+    encode_maps : dict[dict[str,int]]
+        An encoding map generated with generate_categorical_encoding_mappings()
 
-    Returns:
+    returns:
     -------
 
-    df_pl_encoded : pl.DataFrame
-        A polars data frame with categorical variables encoded as integers
-
+    decode_map : dict[dict[int,str]]
+        A decoding map to restore encoded data back into its original form
     """
 
-    df_pl_encoded = df_pl
-
-    for col_name in cat_cols:
-        df_pl_encoded = df_pl_encoded.with_columns(
-            pl.col(col_name)
-            .replace(encode_map[col_name])
-            .cast(pl.Int64)
-        )
-
-    return df_pl_encoded
-
-
+    decode_map = {
+            outer_key: {v: k for k, v in inner_dict.items()}
+            for outer_key, inner_dict in encode_maps.items()
+        }
+    
+    return decode_map
 
         
         

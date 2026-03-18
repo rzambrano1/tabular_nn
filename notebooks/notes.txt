@@ -1,0 +1,6 @@
+#################
+# Notes to Self #
+#################
+
+-   In polars tha missing value is null and seems to be converted into None during encoding. 
+    Make sure to write a test for the encoding/decoding process to checck consistency of this behavior
