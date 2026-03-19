@@ -6,4 +6,4 @@
 **Status:** Alpha / Active Development  
 **Current Focus:** Implementing TabularARGN encoding logic.
 
-This repository serves as a research sandbox for the implementation and benchmarking of high-fidelity synthetic data generation frameworks. The project explores a diverse range of modern architectures, including Auto-Regressive Generative Networks (TabularARGN), Diffusion-based models (TabDiff, TabSyn, TabDit), Generative Moment-matching (GEM-T), and Conditional Variational Autoencoders (CTTVAE).
+This repository serves as a research sandbox for the implementation and benchmarking of high-fidelity synthetic data generation frameworks. The project explores a diverse range of modern architectures, including Auto-Regressive Generative Networks (TabularARGN), Diffusion-based models (TabDiff, TabSyn, TabDit), Generative Moment-matching (GEM-T), Conditional Variational Autoencoders (CTTVAE), and ADAPT-RL.

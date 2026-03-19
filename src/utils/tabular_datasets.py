@@ -41,11 +41,14 @@ from .argn_encoder_decoder import encode_categorical, generate_categorical_encod
 from .argn_encoder_decoder import discrete_float_into_int, generate_numerical_discrete_encoding_mappings, generate_numeric_discrete_decoding_mappings
 from .argn_encoder_decoder import encode_numerical_discrete
 
+# Functions for numerical BINNED and numerical DIGIT
+from .argn_encoder_decoder import BinDesign, get_bin_designs
+
 #########################
 # Functions and Classes #
 #########################
 
-class tabular_dataset_protocol(Protocol):
+class TabularDatasetProtocol(Protocol):
 
     _raw_data: pd.DataFrame
     
@@ -53,7 +56,7 @@ class tabular_dataset_protocol(Protocol):
         ...
 
 
-class argn_dataset(tabular_dataset_protocol):
+class ArgnDataset(TabularDatasetProtocol):
     """
     An object to store a table of any size with mixed data types.
     
@@ -182,6 +185,15 @@ class argn_dataset(tabular_dataset_protocol):
         # Selecting encoding strategy for float columns
 
         self._numeric_strategy = select_numeric_strategy(df_pl, self._numerical_float_columns)
+        
+        # Sorting float columns that will use BINNED strategy and those that will use DIGIT
+        binned_strategy_target_cols = [col_name for col_name, strategy in self._numeric_strategy.items() if strategy == "BINNED"]
+        digit_strategy_target_cols = [col_name for col_name, strategy in self._numeric_strategy.items() if strategy == "DIGIT"]
+
+        self._numerical_binned_columns = [(col_name, col_index) for col_name, col_index in self._numerical_float_columns if col_name in binned_strategy_target_cols]
+        self._numerical_digit_columns = [(col_name, col_index) for col_name, col_index in self._numerical_float_columns if col_name in digit_strategy_target_cols]
+        
+        self._column_binned_designs = get_bin_designs(df_pl, self._numerical_binned_columns)
 
         # Preprocessing Data Frame
         # ------------------------
@@ -294,11 +306,15 @@ def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]
         numbers_to_analyze = df_pl[col].drop_nulls().to_list() # .drop_nulls() to avoid TypeError due to propagation of nulls
         string_numbers = [str(abs(number)) for number in numbers_to_analyze] 
         splited_numbers = [tuple(str_number.split('.')) for str_number in string_numbers]
-        len_int_and_dec = [(len(x), len(y)) for x, y in splited_numbers]
         
-        max_decimal_places = max(x[1] for x in len_int_and_dec)
+        integers_in_numbers, decimals_in_numbers = zip(*splited_numbers)
 
-        max_num_digits = max((x[0]+x[1]) for x in len_int_and_dec)
+        integer_lenghs = [len(integer) for integer in integers_in_numbers]
+        decimal_lenghts = [len(decimal) for decimal in decimals_in_numbers]
+
+        max_decimal_places = max(integer_lenghs)
+
+        max_num_digits = max(decimal_lenghts)
 
         if max_decimal_places <=2:
             col_encoding_strategy[col] = "BINNED"

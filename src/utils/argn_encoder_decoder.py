@@ -14,6 +14,8 @@ import os
 import random
 from pathlib import Path
 
+from dataclasses import dataclass
+
 from typing import Protocol
 
 import warnings
@@ -268,3 +270,62 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int
         )
 
     return df_pl_encoded
+
+@dataclass(frozen=True)
+class BinDesign:
+    """
+    Stores discretization metadata for a single numerical column where
+    BINNED encoding is used.
+    """
+    n_bins: int
+    edges: list[float]
+
+
+def get_bin_designs(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> dict[str,BinDesign]:
+    """
+    Assumes a polars data frame and calculates the number of bins and the corresponding edges  
+    required for BINNED encoding for each column in float_cols. Returns this design as a dict. 
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame 
+    float_cols : list[tuple[str,int]]
+        A list of (column_name, column_index) pairs. The columns
+        are a subset of the existing columns in df_pl 
+
+    Returns:
+    -------
+
+    columns_bin_designs : dict[str,BinDesign]
+        A dictionary with column name as key and a BinDesign 
+        as a corresponding value. BinDesign is a container for
+        the number of bins and the edges for a given column
+    """
+
+    if len(float_cols) == 0:
+        warnings.warn("get_n_bins() received an empty list as an argument...")
+        return {}
+
+    MAX_BINS = 100
+
+    cols_to_process_names, _ = zip(*float_cols)
+
+    columns_bin_designs = {}
+    
+    for col_name in cols_to_process_names:
+        n_unique_vals = len(df_pl[col_name].unique().to_list())
+        n_bins = min(MAX_BINS, n_unique_vals)
+        percentiles = np.linspace(0, 100, n_bins + 1)
+        edges = np.percentile(df_pl[col_name].drop_nulls().to_numpy(), percentiles) # .drop_nulls() to avoid TypeError due to propagation of nulls
+        
+        unique_edges = np.unique(edges)  # remove duplicates from highly skewed data
+        edges_diff = len(edges) - len(unique_edges)
+        if edges_diff > 0:
+            edges = unique_edges
+            n_bins = n_bins - edges_diff
+
+        columns_bin_designs[col_name] = BinDesign(n_bins, edges)
+    
+    return columns_bin_designs

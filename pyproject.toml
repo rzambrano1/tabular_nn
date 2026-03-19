@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabular_nn"
+version = "0.1.0"
+description = "A tabular synthetic data generation system for research and testing multiple network architectures including: TabularARGN, TabSyn, TabDIFF, TabDiT, CTTVAE, and ADAPT-RL"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "CC-BY-NC-4.0"}
+authors = [
+    {name = "Ricardo Zambrano", email = "rzambrano@gmail.com"}
+    ]
