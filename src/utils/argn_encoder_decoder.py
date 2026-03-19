@@ -234,7 +234,7 @@ def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[str,int
     
     return decoding_map
 
-def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int]],discrete_cols:list[str]):
+def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int]], discrete_cols:list[str]):
     """
     Assumes a polars data frame and transform the numerical discrete columns into integer levels.
 

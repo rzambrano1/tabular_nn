@@ -20,6 +20,7 @@ import random
 from pathlib import Path
 
 from typing import Protocol
+from typing import Optional
 
 import warnings
 
@@ -64,13 +65,16 @@ class argn_dataset(tabular_dataset_protocol):
 
     _raw_data : pd.DataFrame
         A pandas data frame unprocessed
+    clip_cols : bool, optional, default_value = True
+        If True outliers in integer and float columns 
+        are clipped to preset percentiles
     
     table : pd.DataFrame
         A copy of the raw data that will be preprocessed and passed
         to the PyTorch Dataset class
     """
 
-    def __init__(self, _raw_data: pd.DataFrame):
+    def __init__(self, _raw_data: pd.DataFrame, clip_cols: Optional[bool] = True):
 
         """
         Raises:
@@ -84,12 +88,16 @@ class argn_dataset(tabular_dataset_protocol):
             raise TypeError(f"Instances of {self.__class__.__name__} can only be initiated with pandas.DataFrame objects...")
         
         self._raw_data = _raw_data
+        self._table_pd = None
+        self.clip_cols = clip_cols
         self._table = self.load_data(self._raw_data)
 
 
     @property
     def table(self):
-        return self._table.to_pandas()
+        if self._table_pd is None:
+            self._table_pd = self._table.to_pandas()
+        return self._table_pd
         
     def load_data(self, df_pd: pd.DataFrame) -> pl.DataFrame:
         """
@@ -108,6 +116,9 @@ class argn_dataset(tabular_dataset_protocol):
         """
 
         df_pl = pl.from_pandas(df_pd).clone()
+
+        # Data Frame Metadata
+        # -------------------
 
         # Data fraame dimensions
         self.nrow = df_pl.height
@@ -130,6 +141,9 @@ class argn_dataset(tabular_dataset_protocol):
         self._bool_columns,
         self._incompatible_columns) = column_types_sieve(df_pl, self.dtypes, self.col_names)
 
+        # Transformations
+        # ---------------
+
         # Casting into Int64 float columns that contain integers
         for col, _ in self._float_columns_to_cast_to_integer:
             df_pl = df_pl.with_columns(
@@ -141,6 +155,17 @@ class argn_dataset(tabular_dataset_protocol):
             columns_to_drop, _ = zip(*self._incompatible_columns)
             df_pl = df_pl.drop(columns_to_drop)
 
+        # Clipping outliers to preserve privacy [Optional]
+
+        if self.clip_cols:
+            # Integer
+            df_pl = clip_columns(df_pl, self._numerical_discrete_columns, lower_quantile = 0.01, upper_quantile = 0.99) 
+            # Float
+            df_pl = clip_columns(df_pl, self._numerical_float_columns, lower_quantile = 0.01, upper_quantile = 0.99)   
+
+        # Mappings
+        # --------
+
         # Generating mappings for categorial values coded as strings
         self.categorical_encoding_maps = generate_categorical_encoding_mappings(df_pl, self._categorical_columns, self.nrow)
 
@@ -151,9 +176,15 @@ class argn_dataset(tabular_dataset_protocol):
 
         self.numerical_discrete_decoding_maps = generate_numeric_discrete_decoding_mappings(self.numerical_discrete_encoding_maps)
 
+        # Encoding Strategy
+        # -----------------
+
         # Selecting encoding strategy for float columns
 
         self._numeric_strategy = select_numeric_strategy(df_pl, self._numerical_float_columns)
+
+        # Preprocessing Data Frame
+        # ------------------------
 
         df_pl = self.argn_preprocessing(
             df_pl = df_pl,
@@ -163,22 +194,26 @@ class argn_dataset(tabular_dataset_protocol):
             # Numerical Discrete
             float_to_int_cols = self._numerical_discrete_columns,
             num_discrete_encoding = self.numerical_discrete_encoding_maps,
-            mumerical_discrete_cols = self._float_columns_to_cast_to_integer
+            numerical_discrete_cols = self._float_columns_to_cast_to_integer,
             # Numerical Binned and Digit
-
-            # Need to add parameters to preprocess float, datetime types
+            num_float_encoding = None,
+            numerical_float_cols = self._numerical_float_columns
+            # Need to add parameters to float, datetime types
             )
 
         return df_pl
 
         
     def argn_preprocessing(
-            self, df_pl: pl.DataFrame, 
-            cat_encoding_map:dict[dict[str,int]], 
-            cat_cols:list[tuple[str,int]],
-            float_to_int_cols:list[tuple[str,int]],
-            num_discrete_encoding:dict[dict[str,int]],
-            mumerical_discrete_cols:list[tuple[str,int]],
+            self, 
+            df_pl: pl.DataFrame,
+            cat_encoding_map: dict[dict[str,int]], 
+            cat_cols: list[tuple[str,int]],
+            float_to_int_cols: list[tuple[str,int]],
+            num_discrete_encoding: dict[dict[str,int]],
+            numerical_discrete_cols: list[tuple[str,int]],
+            num_float_encoding: dict[dict[str,int]],
+            numerical_float_cols: list[tuple[str,int]]
             ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
@@ -192,7 +227,7 @@ class argn_dataset(tabular_dataset_protocol):
         ---------
 
         df_pl : pl.DataFrame
-            A polars data frame.
+            A polars data frame
         encode_map : dict[dict[str,int]]
             Mapping to encode string levels as integer levels of categorical variables
         cat_cols : list[str]
@@ -208,9 +243,8 @@ class argn_dataset(tabular_dataset_protocol):
         A polars dataframe that went through the preprocessing phase
         """
 
-        # Rare categorical, clipping of outliera, geospatial, and text mapping 
-        # not implemented yet.Some of these transformations could be implemented
-        # outside this class
+        # Rare categorical, geospatial, and text mapping not implemented yet.
+        # Some of these transformations could be implemented outside this class          
 
         # Recoding columns with categorial values coded as strings
         if len(cat_cols) > 0:
@@ -220,15 +254,15 @@ class argn_dataset(tabular_dataset_protocol):
         if len(float_to_int_cols) > 0:
             df_pl = discrete_float_into_int(df_pl, float_to_int_cols)
         # Recoding columns with integer data types
-        if len(mumerical_discrete_cols) > 0:
-            df_pl = encode_numerical_discrete(df_pl, num_discrete_encoding, [item[0] for item in mumerical_discrete_cols])
+        if len(numerical_discrete_cols) > 0:
+            df_pl = encode_numerical_discrete(df_pl, num_discrete_encoding, [item[0] for item in numerical_discrete_cols])
         # Recoding columns with float data types
         
         # Recoding columns with datetime data types
 
         return df_pl
 
-def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> list[str]:
+def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> dict[str,str]:
     """
     Selects the encoding strategy for columns with float
 
@@ -243,16 +277,21 @@ def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]
     Returns:
     -------
 
-    col_encoding_strategy : list[str]
-        A list with the encoding strategy for each column with floats
+    col_encoding_strategy : dict[str,str]
+        A dictionary with the column name as key and encoding strategy as value
+        for each column containing floats
     """
 
+    # Guard to avoid vValueError on empty list
+    if not float_cols:
+        return {}
+
     float_col_names, _ = zip(*float_cols)
-    col_encoding_strategy = []
+    col_encoding_strategy = {}
 
     for col in float_col_names:
 
-        numbers_to_analyze = df_pl[col].to_list()
+        numbers_to_analyze = df_pl[col].drop_nulls().to_list() # .drop_nulls() to avoid TypeError due to propagation of nulls
         string_numbers = [str(abs(number)) for number in numbers_to_analyze] 
         splited_numbers = [tuple(str_number.split('.')) for str_number in string_numbers]
         len_int_and_dec = [(len(x), len(y)) for x, y in splited_numbers]
@@ -262,11 +301,11 @@ def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]
         max_num_digits = max((x[0]+x[1]) for x in len_int_and_dec)
 
         if max_decimal_places <=2:
-            col_encoding_strategy.append("BINNED")
+            col_encoding_strategy[col] = "BINNED"
         elif max_num_digits > 6 or max_decimal_places > 3:
-            col_encoding_strategy.append("DIGIT")
+            col_encoding_strategy[col] = "DIGIT"
         else:
-            col_encoding_strategy.append("BINNED")
+            col_encoding_strategy[col] = "BINNED"
 
     return col_encoding_strategy
 
@@ -327,7 +366,7 @@ def column_types_sieve(
         elif dtype in int_types:
             numerical_discrete_columns.append((col_names[i],i))
         elif dtype in float_types:
-            is_integer = (df_pl[col_names[i]] == df_pl[col_names[i]].floor()).all()
+            is_integer = (df_pl[col_names[i]].drop_nulls() == df_pl[col_names[i]].drop_nulls().floor()).all() # Added drop nulls to avoid null propagation as False
             if is_integer:
                 float_columns_to_cast_to_integer.append((col_names[i],i))
                 numerical_discrete_columns.append((col_names[i],i))
@@ -351,4 +390,49 @@ def column_types_sieve(
         bool_columns,
         incompatible_columns
     )  
+
+def clip_columns(df_pl: pl.DataFrame, cols_to_process: list[tuple[str,int]], lower_quantile: float = 0.01, upper_quantile: float = 0.99) -> pl.DataFrame:
+    """
+    Clips columns with numeical values.
+
+    Parameters:
+    ----------
+
+    df_pl: pl.DataFrame
+        A polars data aframe
+    cols_to_process: list[tuple[str,int]]
+        Lis of columns with either integer or float values to beclipped
+    lower_quantile: int, default_value = 0.01
+        Lower quantile threshold. Values below this quantile are replaced 
+        with the value at this quantile. 
+        Setting the lower cutoff at 0.01 selects the value below
+        which the lowest 1% of data points fall
+    upper_quantile: int, default_value = 0.99
+        Upper quantile threshold. Values above this quantile are replaced 
+        with the value at this quantile.
+        Setting the upper cutoff at 0.99 selects the value below
+        which the lowest 99% of data points fall. It also means selecting
+        a value above which the highest 1% of data points fall.
+
+    Returns:
+    -------
+
+    processed_df : pl.DataFrame
+        Polars data frame with specified columns clipped to the given quantile range
+    """
+
+    # Guard to avoid ValueError on empty list
+    if len(cols_to_process) == 0:
+        return df_pl
+    
+    processed_df = df_pl
+    cols_to_process_names, _ = zip(*cols_to_process)
+
+    for col_name in cols_to_process_names:
+        col_values = df_pl[col_name].to_numpy()
+        lower = np.nanquantile(col_values, lower_quantile)
+        upper = np.nanquantile(col_values, upper_quantile)
+        processed_df = processed_df.with_columns(pl.col(col_name).clip(lower, upper))
+
+    return processed_df
 
