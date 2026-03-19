@@ -33,7 +33,12 @@ import pandas as pd
 # Local Modules
 # -------------
 
+# Functions for categorical variables
 from .argn_encoder_decoder import encode_categorical, generate_categorical_encoding_mappings, generate_categorical_decoding_mappings
+
+# Functions for numerical discrete
+from .argn_encoder_decoder import discrete_float_into_int, generate_numerical_discrete_encoding_mappings, generate_numeric_discrete_decoding_mappings
+from .argn_encoder_decoder import encode_numerical_discrete
 
 #########################
 # Functions and Classes #
@@ -132,17 +137,36 @@ class argn_dataset(tabular_dataset_protocol):
                     )
             
         # Removing non-compatible columns
+        if len(self._incompatible_columns) > 0:
+            columns_to_drop, _ = zip(*self._incompatible_columns)
+            df_pl = df_pl.drop(columns_to_drop)
 
         # Generating mappings for categorial values coded as strings
         self.categorical_encoding_maps = generate_categorical_encoding_mappings(df_pl, self._categorical_columns, self.nrow)
 
         self.categorical_decoding_maps = generate_categorical_decoding_mappings(self.categorical_encoding_maps)
 
+        # Generating mappings for numerical discrete columns 
+        self.numerical_discrete_encoding_maps = generate_numerical_discrete_encoding_mappings(df_pl, self._numerical_discrete_columns)
+
+        self.numerical_discrete_decoding_maps = generate_numeric_discrete_decoding_mappings(self.numerical_discrete_encoding_maps)
+
+        # Selecting encoding strategy for float columns
+
+        self._numeric_strategy = select_numeric_strategy(df_pl, self._numerical_float_columns)
+
         df_pl = self.argn_preprocessing(
-            df_pl,
-            self.categorical_encoding_maps, 
-            self._categorical_columns
-            # Need to add parameters to preprocess float, integer, datetime types
+            df_pl = df_pl,
+            # Categorical
+            cat_encoding_map = self.categorical_encoding_maps, 
+            cat_cols = self._categorical_columns,
+            # Numerical Discrete
+            float_to_int_cols = self._numerical_discrete_columns,
+            num_discrete_encoding = self.numerical_discrete_encoding_maps,
+            mumerical_discrete_cols = self._float_columns_to_cast_to_integer
+            # Numerical Binned and Digit
+
+            # Need to add parameters to preprocess float, datetime types
             )
 
         return df_pl
@@ -150,8 +174,11 @@ class argn_dataset(tabular_dataset_protocol):
         
     def argn_preprocessing(
             self, df_pl: pl.DataFrame, 
-            encode_map:dict[dict[str,int]], 
-            cat_cols:list[str]
+            cat_encoding_map:dict[dict[str,int]], 
+            cat_cols:list[tuple[str,int]],
+            float_to_int_cols:list[tuple[str,int]],
+            num_discrete_encoding:dict[dict[str,int]],
+            mumerical_discrete_cols:list[tuple[str,int]],
             ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
@@ -170,24 +197,78 @@ class argn_dataset(tabular_dataset_protocol):
             Mapping to encode string levels as integer levels of categorical variables
         cat_cols : list[str]
             A list of columns with categorical variables coded as strings
+        float_to_int_cols:list[tuple[str,int]],
+            A list of columns with float values that should be discrete values
+        mumerical_discrete_cols:list[tuple[str,int]]
+            A list of columns with numerical discrete values
+        
+        Returns:
+        -------
+
+        A polars dataframe that went through the preprocessing phase
         """
 
-        # Rare categorical, geospatial, and text mapping not implemented yet
+        # Rare categorical, clipping of outliera, geospatial, and text mapping 
+        # not implemented yet.Some of these transformations could be implemented
+        # outside this class
 
         # Recoding columns with categorial values coded as strings
         if len(cat_cols) > 0:
-            df_pl = encode_categorical(df_pl, encode_map, [item[0] for item in cat_cols])
+            df_pl = encode_categorical(df_pl, cat_encoding_map, [item[0] for item in cat_cols])
         
         # Casting float columns with discrete values as Int64
-
+        if len(float_to_int_cols) > 0:
+            df_pl = discrete_float_into_int(df_pl, float_to_int_cols)
         # Recoding columns with integer data types
-
+        if len(mumerical_discrete_cols) > 0:
+            df_pl = encode_numerical_discrete(df_pl, num_discrete_encoding, [item[0] for item in mumerical_discrete_cols])
         # Recoding columns with float data types
-
+        
         # Recoding columns with datetime data types
 
         return df_pl
 
+def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> list[str]:
+    """
+    Selects the encoding strategy for columns with float
+
+    Parameters:
+    ----------
+    
+    df_pl : pl.DataFrame
+        A polars data frame
+    float_cols : list[tuple[str,int]]
+        A list with the columns with float data types
+
+    Returns:
+    -------
+
+    col_encoding_strategy : list[str]
+        A list with the encoding strategy for each column with floats
+    """
+
+    float_col_names, _ = zip(*float_cols)
+    col_encoding_strategy = []
+
+    for col in float_col_names:
+
+        numbers_to_analyze = df_pl[col].to_list()
+        string_numbers = [str(abs(number)) for number in numbers_to_analyze] 
+        splited_numbers = [tuple(str_number.split('.')) for str_number in string_numbers]
+        len_int_and_dec = [(len(x), len(y)) for x, y in splited_numbers]
+        
+        max_decimal_places = max(x[1] for x in len_int_and_dec)
+
+        max_num_digits = max((x[0]+x[1]) for x in len_int_and_dec)
+
+        if max_decimal_places <=2:
+            col_encoding_strategy.append("BINNED")
+        elif max_num_digits > 6 or max_decimal_places > 3:
+            col_encoding_strategy.append("DIGIT")
+        else:
+            col_encoding_strategy.append("BINNED")
+
+    return col_encoding_strategy
 
 def column_types_sieve(
         df_pl: pl.DataFrame, 
@@ -270,4 +351,4 @@ def column_types_sieve(
         bool_columns,
         incompatible_columns
     )  
-        
+

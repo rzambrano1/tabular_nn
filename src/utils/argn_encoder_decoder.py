@@ -96,8 +96,6 @@ def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tu
 
     categorical_encode_maps : dict[dict[str,int]]
         A dictionary with dictionaries that map uniques levels to integers
-    categorical_columns : list[str]
-        A list of columns with categorical strings
 
     Warns:
     -----
@@ -150,3 +148,123 @@ def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> 
         }
     
     return decode_map
+
+def discrete_float_into_int(df_pl: pl.DataFrame, columns_to_fix: list[tuple[str,int]]) -> pl.DataFrame:
+    """
+    Casts float columns flagged as discrete as Int64
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame 
+        A polars data frame
+    columns_to_fix: list[tuple[str,int]]
+        A list with tuples containing the column name and column index 
+        of columns to modify
+
+    Returns:
+    -------
+
+    A polars dataframe modified 
+    """
+
+    for col, i in columns_to_fix:
+        df_pl = df_pl.with_columns(
+            pl.col(col).cast(pl.Int64)
+            )
+    
+    return df_pl
+
+def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_cols: list[tuple[str,int]]) -> dict[dict[str,int]]:
+    """
+    Creates a mapping for encoding numerical discrete variables. 
+
+    Note the missing values (null) will be casted as None 
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame
+    cat_cols : list[tuple[str,int]]
+        A list with tuples containing the name and the column index for categorical variables
+
+    Returns:
+    -------
+
+    categorical_encoding_maps : dict[dict[str,int]]
+        A dictionary with dictionaries that map uniques levels to integers
+    """
+    
+    numerical_discrete_encodng_maps = {}
+
+    for col, i in discrete_cols:
+        unique_vals = df_pl[:, i].unique().to_list()
+
+        map_name = col
+
+        numerical_discrete_encodng_maps[map_name] = {
+            val: idx for idx, val in enumerate(unique_vals)
+        }
+
+    return numerical_discrete_encodng_maps
+
+def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
+    """
+    Assumes a mapping for encoding numerical discrete variables. Returns a mapping for decoding numerical
+    discrete variables back into integers 
+
+    Parameters:
+    ----------
+
+    encoding_maps : dict[dict[str,int]]
+        An encoding map generated with generate_numerical_discrete_encoding_mappings()
+
+    returns:
+    -------
+
+    decoding_map : dict[dict[int,str]]
+        A decoding map to restore encoded data back into its original form
+    """
+
+    decoding_map = {
+            outer_key: {v: k for k, v in inner_dict.items()}
+            for outer_key, inner_dict in encoding_maps.items()
+        }
+    
+    return decoding_map
+
+def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int]],discrete_cols:list[str]):
+    """
+    Assumes a polars data frame and transform the numerical discrete columns into integer levels.
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame with categorical data encoded as strings
+    
+    encoding_map : dict[dict[str,int]] 
+        A dict of dicts with encoding mapping of discrete values into integer levels
+    
+    cat_cols : list[str]
+        List of columns to encode
+
+    Returns:
+    -------
+
+    df_pl_encoded : pl.DataFrame
+        A polars data frame with numerical discrete variables encoded as integers
+
+    """
+
+    df_pl_encoded = df_pl
+
+    for col_name in discrete_cols:
+        df_pl_encoded = df_pl_encoded.with_columns(
+            pl.col(col_name)
+            .replace(encoding_map[col_name])
+            .cast(pl.Int64)
+        )
+
+    return df_pl_encoded
