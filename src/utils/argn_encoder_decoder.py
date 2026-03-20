@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import warnings
+import logging
 
 # Numerical & Data 
 # ----------------
@@ -200,10 +201,10 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     
     numerical_discrete_encodng_maps = {}
 
-    for col, i in discrete_cols:
+    for col_name, i in discrete_cols:
         unique_vals = df_pl[:, i].unique().to_list()
 
-        map_name = col
+        map_name = col_name
 
         numerical_discrete_encodng_maps[map_name] = {
             val: idx for idx, val in enumerate(unique_vals)
