@@ -42,7 +42,7 @@ from .argn_encoder_decoder import discrete_float_into_int, generate_numerical_di
 from .argn_encoder_decoder import encode_numerical_discrete
 
 # Functions for numerical BINNED and numerical DIGIT
-from .argn_encoder_decoder import BinDesign, get_bin_designs
+from .argn_encoder_decoder import BinDesign, get_bin_designs, generate_numerical_binned_encoding_mappings, generate_numeric_binned_decoding_mappings
 
 #########################
 # Functions and Classes #
@@ -193,7 +193,11 @@ class ArgnDataset(TabularDatasetProtocol):
         self._numerical_binned_columns = [(col_name, col_index) for col_name, col_index in self._numerical_float_columns if col_name in binned_strategy_target_cols]
         self._numerical_digit_columns = [(col_name, col_index) for col_name, col_index in self._numerical_float_columns if col_name in digit_strategy_target_cols]
         
+        # BINNED strategy
         self._column_binned_designs = get_bin_designs(df_pl, self._numerical_binned_columns)
+
+        self.numerical_binned_encoding_maps = generate_numerical_binned_encoding_mappings(self._numerical_binned_columns, self._column_binned_designs)
+        self.numerical_binned_decoding_maps = generate_numeric_binned_decoding_mappings(self.numerical_binned_encoding_maps)
 
         # Preprocessing Data Frame
         # ------------------------

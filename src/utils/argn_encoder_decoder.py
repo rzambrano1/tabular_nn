@@ -17,6 +17,10 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from typing import Protocol
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+U = TypeVar("U")
 
 import warnings
 import logging
@@ -277,6 +281,14 @@ class BinDesign:
     """
     Stores discretization metadata for a single numerical column where
     BINNED encoding is used.
+
+    Attributes:
+    ----------
+
+    n_bins : int
+        Number of bins in design
+    edges : list[float]
+        Percentile-based bin edge values, length = n_bins + 1
     """
     n_bins: int
     edges: list[float]
@@ -330,3 +342,109 @@ def get_bin_designs(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> di
         columns_bin_designs[col_name] = BinDesign(n_bins, edges)
     
     return columns_bin_designs
+
+
+def generate_numerical_binned_encoding_mappings(
+        binned_cols: list[tuple[str,int]], 
+        bin_designs: dict[str,BinDesign]) -> dict[dict[tuple[float,float], int]]:
+    """
+    Creates a mapping for encoding collumns following the numerical binned strategy. 
+
+    Note the missing values (null) will be casted as None 
+
+    Parameters:
+    ----------
+
+    binned_cols : list[tuple[str,int]]
+        A list with tuples containing the name and index of each column to 
+        be processed as key-vaue pairs
+    bin_designs : dict[str,BinDesign[int, list[float]]]
+        A dict with column names as keys and bin designs as values for each column 
+        passed in binned_cols.
+        The designs are abstrated in BinDesign instances, each of which stores 
+        the number of bins in the n_bins attribute and a list of edges in the
+        edges attribute  
+
+    Returns:
+    -------
+
+    categorical_encoding_maps : dict[dict[tuple[float,float], int]]
+        A dictionary containing dictionaries that map intervals to integers.
+        Outer key: column name
+        Inner dict: maps (lower_edge, upper_edge) tuples to int category index
+                    None mapped to  0  (reserved for missing values)
+
+    Raises:
+    ------
+
+    ValueError
+        If the number of bin designs does not match the number of columns
+        passed in binned_cols there will be columns that will not have 
+        rules to be processed
+    """
+
+    if len(binned_cols) == 0:
+        logging.info("No columns following the BINNED encoding strategy")
+        return {}
+    
+    if len(binned_cols) > 0 and (len(bin_designs) != len(binned_cols)):
+        raise ValueError(
+            f"The number of bin designs ({len(bin_designs)}) does not match "
+            f"number of columns following the BINNED strategy ({len(binned_cols)})"
+            )
+    
+
+    numerical_binned_encoding_maps = {}
+
+    for col_name, _ in binned_cols:
+        # Extracting design 
+        curr_col_bin_design = bin_designs[col_name]
+        curr_n_bins = curr_col_bin_design.n_bins
+        curr_edges = curr_col_bin_design.edges
+
+        map_name = col_name
+
+        # Initializing inner dict
+
+        inner_mapping = {}
+        
+        inner_mapping[None] = 0 
+
+        for i in range(curr_n_bins):
+            interval = (curr_edges[i], curr_edges[i+1])
+            inner_mapping[interval] = i + 1  # The first entry of the dict is None mapped to 0. Thus mapping is shifted by 1
+
+        # Assigning the inner dict to the outer dict
+
+        numerical_binned_encoding_maps[col_name] = inner_mapping
+    
+    return numerical_binned_encoding_maps
+
+
+def generate_numeric_binned_decoding_mappings(encoding_maps: dict[dict[tuple[float,float], int]]) -> dict[dict[int, tuple[float,float]]]:
+    """
+    Assumes a mapping for encoding columns with the BINNED strategy. Returns a mapping for decoding numerical
+    binned variables back into bins with float edges 
+
+    Parameters:
+    ----------
+
+    encoding_maps : dict[dict[tuple[float,float], int]]
+        An encoding map generated with generate_numerical_binned_encoding_mappings()
+
+    returns:
+    -------
+
+    decoding_map : dict[dict[int, tuple[float,float]]]
+        A decoding map to restore encoded data back into its intermediate form.
+        Outer key: column name
+        Inner dict: maps integer level back to (lower_edge, upper_edge) tuples 
+                    0 mapped to  None  (reserved for missing values)
+    """
+
+    decoding_map = {
+            outer_key: {v: k for k, v in inner_dict.items()}
+            for outer_key, inner_dict in encoding_maps.items()
+        }
+    
+    return decoding_map
