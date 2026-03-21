@@ -46,6 +46,7 @@ class encoding_decoding_engine_protocol(Protocol):
     
     # Not fully implemented
 
+
 def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_cols:list[str]):
     """
     Assumes a polars data frame and transform the categorical columns into integer levels.
@@ -80,6 +81,51 @@ def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_co
         )
 
     return df_pl_encoded
+
+
+def decode_categorical(df_pl:pl.DataFrame, decode_map:dict[dict[int, str]], cat_cols:list[str]):
+    """
+    Assumes a polars data frame and transform the encoded data in categorical columns 
+    back into string levels.
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame with categorical data encoded as strings
+    
+    decode_map : dict[dict[int, str]] 
+        A dict of dicts with decoding mapping of integer levels into string levels
+        -----
+        Outer key: column name
+        Inner dict: key, integer levels : value, string levels 
+    
+    cat_cols : list[str]
+        List of columns to encode
+
+    Returns:
+    -------
+
+    df_pl_encoded : pl.DataFrame
+        A polars data frame with categorical variables encoded as integers
+
+    """
+
+    df_pl_encoded = df_pl
+
+    for col_name in cat_cols:
+        curr_map = decode_map[col_name]
+        df_pl_encoded = df_pl_encoded.with_columns(
+            pl.col(col_name)
+            .map_elements(
+                lambda x, m = curr_map: m.get(x, None),
+                return_dtype = pl.String
+            )
+            .alias(col_name)
+        )
+
+    return df_pl_encoded
+
 
 def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tuple[str,int]], nrow:int) -> dict[dict[str,int]]:
     """
@@ -156,6 +202,7 @@ def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> 
     
     return decode_map
 
+
 def discrete_float_into_int(df_pl: pl.DataFrame, columns_to_fix: list[tuple[str,int]]) -> pl.DataFrame:
     """
     Casts float columns flagged as discrete as Int64
@@ -182,7 +229,8 @@ def discrete_float_into_int(df_pl: pl.DataFrame, columns_to_fix: list[tuple[str,
     
     return df_pl
 
-def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_cols: list[tuple[str,int]]) -> dict[dict[str,int]]:
+
+def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_cols: list[tuple[str,int]]) -> dict[dict[int,int]]:
     """
     Creates a mapping for encoding numerical discrete variables. 
 
@@ -199,7 +247,7 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     Returns:
     -------
 
-    categorical_encoding_maps : dict[dict[str,int]]
+    categorical_encoding_maps : dict[dict[int,int]]
         A dictionary with dictionaries that map uniques levels to integers
     """
     
@@ -216,7 +264,8 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
 
     return numerical_discrete_encodng_maps
 
-def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
+
+def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[int,int]]) -> dict[dict[int,int]]:
     """
     Assumes a mapping for encoding numerical discrete variables. Returns a mapping for decoding numerical
     discrete variables back into integers 
@@ -230,7 +279,7 @@ def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[str,int
     returns:
     -------
 
-    decoding_map : dict[dict[int,str]]
+    decoding_map : dict[dict[int,int]]
         A decoding map to restore encoded data back into its original form
     """
 
@@ -241,7 +290,8 @@ def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[str,int
     
     return decoding_map
 
-def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int]], discrete_cols:list[str]) -> pl.DataFrame:
+
+def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[int,int]], discrete_cols:list[str]) -> pl.DataFrame:
     """
     Assumes a polars data frame and transform the numerical discrete columns into integer levels.
 
@@ -251,7 +301,7 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int
     df_pl : pl.DataFrame
         A polars data frame with categorical data encoded as strings
     
-    encoding_map : dict[dict[str,int]] 
+    encoding_map : dict[dict[int,int]] 
         A dict of dicts with encoding mapping of discrete values into integer levels
     
     cat_cols : list[str]
@@ -268,6 +318,7 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int
     df_pl_encoded = df_pl
 
     for col_name in discrete_cols:
+        
         df_pl_encoded = df_pl_encoded.with_columns(
             pl.col(col_name)
             .replace(encoding_map[col_name])
@@ -275,6 +326,54 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[str,int
         )
 
     return df_pl_encoded
+
+
+def decode_numerical_discrete(df_pl:pl.DataFrame, decode_map:dict[dict[int, int]], discrete_cols:list[str]):
+    """
+    Assumes a polars data frame and transform the encoded data in numerical discrete columns 
+    back into integer levels.
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame with numerical integers (like ZIP codes) data encoded as integer levels
+    
+    decode_map : dict[dict[int, int]] 
+        A dict of dicts with decoding mapping of integer levels back into numerical integers 
+        -----
+        Outer key: column name
+        Inner dict: key, integer levels : value, numerical integers
+    
+    discrete_cols : list[str]
+        List of columns to encode
+
+    Returns:
+    -------
+
+    df_pl_encoded : pl.DataFrame
+        A polars data frame with integer levels variables decoded back to their original 
+        form as numerical discrete
+
+    """
+
+    df_pl_encoded = df_pl
+
+    for col_name in discrete_cols:
+
+        curr_map = decode_map[col_name]
+
+        df_pl_encoded = df_pl_encoded.with_columns(
+            pl.col(col_name)
+            .map_elements(
+                lambda x, m = curr_map: m.get(x, None),
+                return_dtype = pl.Int64
+            )
+            .alias(col_name)
+        )
+
+    return df_pl_encoded
+
 
 @dataclass(frozen=True)
 class BinDesign:

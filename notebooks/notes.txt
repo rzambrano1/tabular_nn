@@ -4,3 +4,62 @@
 
 -   In polars tha missing value is null and seems to be converted into None during encoding. 
     Make sure to write a test for the encoding/decoding process to checck consistency of this behavior
+
+
+
+
+###################################################
+# Research References for Tabular Data Generation #
+###################################################
+
+TabDIFF
+-------
+
+https://arxiv.org/pdf/2410.20626
+https://github.com/MinkaiXu/TabDiff
+https://www.youtube.com/watch?v=2HIr2nxQvBU
+
+TabSyn
+------
+
+https://arxiv.org/pdf/2310.09656
+https://github.com/amazon-science/tabsyn
+
+TabularARGN
+-----------
+
+https://arxiv.org/pdf/2501.12012
+https://github.com/mostly-ai/mostlyai-engine/tree/main
+
+https://mostly.ai/blog/introducing-tabularargn-a-flexible-and-efficient-auto-regressive-framework-for-generating-high-fidelity-synthetic-data
+https://mostly-ai.github.io/mostlyai/api_client/#mostlyai.sdk.domain.Connector.schema
+
+https://arxiv.org/pdf/2508.00718
+
+TabDDPM
+-------
+
+https://arxiv.org/pdf/2209.15421
+
+TabDiT
+------
+
+https://arxiv.org/pdf/2504.07566
+
+CCTVAE
+------
+
+https://arxiv.org/pdf/2602.03641
+
+GEM-T
+-----
+
+https://arxiv.org/pdf/2509.17752?
+
+ADAPT-RL
+--------
+
+Synthetic Data Generation for Alleviating Class Imbalance with Reinforcement Learning
+
+2025 IEEE International Conference on Collaborative Advances in Software and COmputiNg (CASCON)
+DOI 10.1109/CASCON66301.2025.00126
