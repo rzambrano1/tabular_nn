@@ -42,7 +42,7 @@ from .argn_encoder_decoder import discrete_float_into_int, generate_numerical_di
 from .argn_encoder_decoder import encode_numerical_discrete
 
 # Functions for numerical BINNED and numerical DIGIT
-from .argn_encoder_decoder import BinDesign, get_bin_designs, generate_numerical_binned_encoding_mappings, generate_numeric_binned_decoding_mappings
+from .argn_encoder_decoder import BinDesign, get_bin_designs, generate_numerical_binned_encoding_mappings, generate_numeric_binned_decoding_mappings, encode_numerical_binned
 
 #########################
 # Functions and Classes #
@@ -211,10 +211,12 @@ class ArgnDataset(TabularDatasetProtocol):
             float_to_int_cols = self._numerical_discrete_columns,
             num_discrete_encoding = self.numerical_discrete_encoding_maps,
             numerical_discrete_cols = self._float_columns_to_cast_to_integer,
-            # Numerical Binned and Digit
-            num_float_encoding = None,
-            numerical_float_cols = self._numerical_float_columns
-            # Need to add parameters to float, datetime types
+            # Numerical Binned
+            num_binned_encoding = self.numerical_binned_encoding_maps,
+            numerical_binned_cols = self._numerical_binned_columns,
+            binned_strategy_design = self._column_binned_designs 
+            # Numerical Digit
+            # Datetime
             )
 
         return df_pl
@@ -228,8 +230,9 @@ class ArgnDataset(TabularDatasetProtocol):
             float_to_int_cols: list[tuple[str,int]],
             num_discrete_encoding: dict[dict[str,int]],
             numerical_discrete_cols: list[tuple[str,int]],
-            num_float_encoding: dict[dict[str,int]],
-            numerical_float_cols: list[tuple[str,int]]
+            num_binned_encoding: dict[dict[str,int]],
+            numerical_binned_cols: list[tuple[str,int]],
+            binned_strategy_design: dict[str,BinDesign]
             ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
@@ -244,14 +247,22 @@ class ArgnDataset(TabularDatasetProtocol):
 
         df_pl : pl.DataFrame
             A polars data frame
-        encode_map : dict[dict[str,int]]
+        cat_encoding_map : dict[dict[str,int]]
             Mapping to encode string levels as integer levels of categorical variables
         cat_cols : list[str]
             A list of columns with categorical variables coded as strings
         float_to_int_cols:list[tuple[str,int]],
             A list of columns with float values that should be discrete values
-        mumerical_discrete_cols:list[tuple[str,int]]
+        num_discrete_encoding: dict[dict[str,int]]
+            Encoding mappings for numerical discrete columns
+        numerical_discrete_cols:list[tuple[str,int]]
             A list of columns with numerical discrete values
+        num_binned_encoding: dict[dict[str,int]]
+            Encoding maps for columns encoded using the BINNED strategy
+        numerical_binned_cols: list[tuple[str,int]]
+            A list of the columns following the BINNED strategy
+        binned_strategy_design: dict[str,BinDesign]
+            A dict storing the encoding strategy for columns encoded using BINNED
         
         Returns:
         -------
@@ -274,6 +285,12 @@ class ArgnDataset(TabularDatasetProtocol):
             df_pl = encode_numerical_discrete(df_pl, num_discrete_encoding, [item[0] for item in numerical_discrete_cols])
         # Recoding columns with float data types
         
+        # BINNED
+        if len(numerical_binned_cols) > 0:
+            df_pl = encode_numerical_binned(df_pl, num_binned_encoding, [item[0] for item in numerical_binned_cols], binned_strategy_design)
+
+        # DIGIT
+
         # Recoding columns with datetime data types
 
         return df_pl
