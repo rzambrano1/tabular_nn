@@ -44,6 +44,8 @@ from .argn_encoder_decoder import encode_numerical_discrete
 # Functions for numerical BINNED and numerical DIGIT
 from .argn_encoder_decoder import BinDesign, get_bin_designs, generate_numerical_binned_encoding_mappings, generate_numeric_binned_decoding_mappings, encode_numerical_binned
 
+from .argn_encoder_decoder import encode_numerical_digit
+
 #########################
 # Functions and Classes #
 #########################
@@ -199,6 +201,9 @@ class ArgnDataset(TabularDatasetProtocol):
         self.numerical_binned_encoding_maps = generate_numerical_binned_encoding_mappings(self._numerical_binned_columns, self._column_binned_designs)
         self.numerical_binned_decoding_maps = generate_numeric_binned_decoding_mappings(self.numerical_binned_encoding_maps)
 
+        # DIGIT
+        # Encoded directly in the preprocessing step
+
         # Preprocessing Data Frame
         # ------------------------
 
@@ -214,8 +219,9 @@ class ArgnDataset(TabularDatasetProtocol):
             # Numerical Binned
             num_binned_encoding = self.numerical_binned_encoding_maps,
             numerical_binned_cols = self._numerical_binned_columns,
-            binned_strategy_design = self._column_binned_designs 
+            binned_strategy_design = self._column_binned_designs, 
             # Numerical Digit
+            numerical_digit_cols = self._numerical_digit_columns
             # Datetime
             )
 
@@ -232,7 +238,8 @@ class ArgnDataset(TabularDatasetProtocol):
             numerical_discrete_cols: list[tuple[str,int]],
             num_binned_encoding: dict[dict[str,int]],
             numerical_binned_cols: list[tuple[str,int]],
-            binned_strategy_design: dict[str,BinDesign]
+            binned_strategy_design: dict[str,BinDesign],
+            numerical_digit_cols: list[tuple[str,int]]
             ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
@@ -290,6 +297,8 @@ class ArgnDataset(TabularDatasetProtocol):
             df_pl = encode_numerical_binned(df_pl, num_binned_encoding, [item[0] for item in numerical_binned_cols], binned_strategy_design)
 
         # DIGIT
+
+        df_pl, self.numerical_digit_encoding_maps = encode_numerical_digit(df_pl, [item[0] for item in numerical_digit_cols])
 
         # Recoding columns with datetime data types
 

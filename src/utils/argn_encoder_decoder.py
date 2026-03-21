@@ -16,11 +16,9 @@ from pathlib import Path
 
 from dataclasses import dataclass
 
-from typing import Protocol
-from typing import Generic, TypeVar
+import re
 
-T = TypeVar("T")
-U = TypeVar("U")
+from typing import Protocol
 
 import warnings
 import logging
@@ -785,9 +783,15 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
     Returns:
     -------
 
-    n_sub_cols, sub_column_values_as_string : tuple[int, list[str]]
+    n_sub_cols, n_digit_sub_cols, n_decimal_sub_cols, sub_column_values_as_string : tuple[int, list[str]]
+        
         n_sub_cols, the number of sub-columns required to encode col_name 
         following the DIGIT strategy
+
+        n_digit_sub_cols, the number of digits in the encoding scheme
+        
+        n_decimal_sub_cols, the number of decimls in the encoding scheme
+        
         sub_column_values_as_string, the values for each sub-column, starting
         with a binary column for the sign of the float, the float number 
         padded with zeros in both sides, and finally a binary column 
@@ -843,4 +847,155 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
     signs_and_pad_digits_and_decimals = [f"{prefix}{value}" for prefix, value in zip(signs_and_pad_digits, padded_decimals)]
     sub_column_values_as_string = [f"{prefix}{value}" for prefix, value in zip(signs_and_pad_digits_and_decimals, missing_in_items)]
 
-    return n_sub_cols, sub_column_values_as_string  
+    return n_sub_cols, n_digit_sub_cols, n_decimal_sub_cols, sub_column_values_as_string  
+
+
+def encode_numerical_digit(df_pl: pl.DataFrame, digit_cols: list[str]) -> tuple[pl.DataFrame, dict[str, tuple[int,int]]]:
+    """"
+    Assumes a polars data frame and a list of columns to process with float values
+    to encode using the DIGIT strategy
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame 
+        A polars data frame
+    digit_cols: list[str]
+        Columns to encode following the DIGIT strategy
+    
+    Returns:
+    -------
+
+    processed_df : pl.DataFrame
+        A data frame with float columns encoded using the DIGIT strategy. The
+        encoded column is removed and multiple sub-cloumns have been added 
+        in its place
+    
+    digit_encodings: dict[str, tuple[int,int]]
+        The encoding scheme for each column, with the column name as key
+        and a tuple with the number of decimal and digits as values  
+    """
+
+    if len(digit_cols) == 0:
+        return df_pl
+    
+    processed_df = df_pl
+
+    digit_encodings = {}
+
+    for col_name in digit_cols:
+        
+        # First generate the padded values for a given column
+        n_sub_cols, n_digit_sub_cols, n_decimal_sub_cols, sub_column_values_as_string = generate_sub_column_values(processed_df, col_name)
+
+        # An important step is saving the number of digits and decimals in the encoding
+        digit_encodings[col_name] = (n_digit_sub_cols, n_decimal_sub_cols)
+
+        # Then insert that column in the polars data frame temporarily
+        temp_col = f"_{col_name}_tmp"
+        processed_df = processed_df.with_columns(
+            pl.Series(name = temp_col, values = sub_column_values_as_string)
+        )
+
+        # This step generates the subcolumns from the temporal column
+        processed_df = processed_df.with_columns([
+            pl.col(temp_col)
+            .str.slice(i, 1)
+            .cast(pl.Int64)
+            .alias(f"{col_name}_{i + 1}")
+            for i in range(n_sub_cols)
+        ])
+
+        # Dropping the original column and the temp column
+        processed_df = processed_df.drop([col_name, temp_col])
+    
+    return processed_df, digit_encodings
+
+
+def decode_numerical_digit(
+        df_pl: pl.DataFrame,
+        digit_cols: list[str],
+        digit_encodings: dict[str, tuple[int, int]]) -> pl.DataFrame:
+    """
+    Reconstructs float columns from their digit sub-column encoding.
+
+    Encoding schema per original column:
+        col_1:            sign indicator          (0 = positive, 1 = negative)
+        col_2...col_n-1:  digit sub-columns       (integer digits then decimal digits - The vocabulary of each column is 0-9)
+        col_n:            missing indicator       (1 = null, 0 = valid value)
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data frame with digit-encoded sub-columns
+    digit_cols: list[str]
+        Columns to encode following the DIGIT strategy
+    digit_encodings : dict[str, tuple[int, int]]
+        The encoding scheme for each column, with the column name as key
+        and a tuple with the number of decimal and digits as values 
+
+    Returns:
+    -------
+    df_decoded : pl.DataFrame
+        Dataframe with digit sub-columns replaced by reconstructed float columns
+    """
+    
+    df_decoded = df_pl
+
+    for col_name in digit_cols:
+        
+        # Extracting the encoding information
+        curr_col_encoding = digit_encodings[col_name]
+
+        # Collecting all columns needed to decode the float value
+        all_columns_in_encoding = [item for item in df_decoded.columns if re.search(col_name, item, re.IGNORECASE)]
+
+        # Extracting column name for sign and missing
+        sign_col = all_columns_in_encoding[0]
+        missing_col = all_columns_in_encoding[-1]
+
+        # Pinpont the columns that are digits and those that are decimals
+        digit_columns_in_encoding = all_columns_in_encoding[1:(curr_col_encoding[0] + 1)]
+        decimal_columns_in_encoding = all_columns_in_encoding[curr_col_encoding[1] : -1]
+
+        # Joining Digits
+        digits_in_magnitude = [str(item) for item in df_decoded[digit_columns_in_encoding[0]].to_list()]
+
+        for digit_sub_col in digit_columns_in_encoding[1:]:
+            next_digit_list = [str(item) for item in df_decoded[digit_sub_col].to_list()]
+            digits_in_magnitude = [f"{digit}{next_digit}" for digit, next_digit in zip(digits_in_magnitude, next_digit_list)]
+
+        # Joining Decimals
+        decimals_in_magnitude = [str(item) for item in df_decoded[decimal_columns_in_encoding[0]].to_list()]
+
+        for decimal_sub_col in decimal_columns_in_encoding[1:]:
+            next_decimal_list = [str(item) for item in df_decoded[decimal_sub_col].to_list()]
+            decimals_in_magnitude = [f"{decimal}{next_decimal}" for decimal, next_decimal in zip(decimals_in_magnitude, next_decimal_list)]
+        
+        # Joining the string numbers
+        magnitudes_as_str = [f"{digits}.{decimals}" for digits, decimals in zip(digits_in_magnitude, decimals_in_magnitude)]
+
+        # Casting string numbers into float
+        magnitudes = [float(item) for item in magnitudes_as_str]
+
+        # Inserting magnitudes in temporal column
+        temp_col = f"_{col_name}_tmp"
+        df_decoded = df_decoded.with_columns(
+            pl.Series(name = temp_col, values = magnitudes)
+        )
+
+        # Reconstructing float column
+        df_decoded = df_decoded.with_columns(
+            pl.when(pl.col(missing_col) == 1)
+            .then(pl.lit(None).cast(pl.Float64))
+            .when(pl.col(sign_col) == 0)
+            .then(pl.col(temp_col).cast(pl.Float64))
+            .otherwise((pl.col(temp_col) * -1.0).cast(pl.Float64))
+            .alias(col_name)
+        )
+
+        # Drop all digit sub-columns
+        df_decoded = df_decoded.drop(all_columns_in_encoding + [temp_col])
+
+    return df_decoded
