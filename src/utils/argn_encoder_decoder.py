@@ -700,3 +700,147 @@ def decode_numerical_binned(
         )
 
     return df_pl_encoded
+
+
+def pad_numeric_digit_col(string_numbers: list[str], max_len: int, direction: str) -> list[str]:
+   """
+   Assumes a list of numbers casted into strings and returns a list of string 
+   containing the same numbers bud padded with zeros on the left for digits
+   [direction == "left"] or right for decimals [direction == "right"]
+
+   Parameters:
+   ----------
+
+   string_numbers : list[str]
+        A list of numbers casted as strings to process
+   max_len : int
+        The maximun length of the string numbers. The every string number in 
+        the list will be paddded with zeros up until the length of the padded
+        number is equal to max_len
+   direction : str, ["left", "right"]
+        The direction of the padding. Left adds zeroes to the left of the 
+        string number (digits case) and right adds the zeros to the right of
+        the number (decimal case).
+    
+   Returns:
+   -------
+
+   processed_number_strings : list[str]
+        A list of padded string numbers
+
+   Warns:
+   -----
+
+   If string_numbers is empty
+
+   Raises:
+   ------
+
+   ValueError
+      If the parameter direction is not equal to either 'right' or 'left'
+
+   """
+
+   if direction not in ["right", "left"]:
+        raise ValueError(f"The direction parameter only accepts 'right' or 'left values. Client provided {direction}...")
+    
+   if len(string_numbers) == 0:
+        warnings.warn("No numbers were provided to the padding step...")
+        return []
+   
+   processed_number_strings = []
+
+   for item in string_numbers:
+       if pd.isna(item):
+           padded_value = '0'*max_len
+           processed_number_strings.append(padded_value)
+       elif len(item) == max_len:
+           processed_number_strings.append(item)
+       else:
+           pad_needed = max_len - len(item)
+           generated_pad = '0'*pad_needed
+           if direction == 'left':
+               padded_value = generated_pad + item
+               processed_number_strings.append(padded_value)
+           else:
+               padded_value = item + generated_pad
+               processed_number_strings.append(padded_value)
+
+   return processed_number_strings
+
+
+def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int, list[str]]:
+    """
+    Assumes a polars data frame and a column name with float values to be
+    encoded following the DIGIT strategy, which generates sub columns.
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame
+        A polars data fra,e
+    col_name : str
+        The name of the column with float values to process
+    
+    Returns:
+    -------
+
+    n_sub_cols, sub_column_values_as_string : tuple[int, list[str]]
+        n_sub_cols, the number of sub-columns required to encode col_name 
+        following the DIGIT strategy
+        sub_column_values_as_string, the values for each sub-column, starting
+        with a binary column for the sign of the float, the float number 
+        padded with zeros in both sides, and finally a binary column 
+        to indicate missing values
+    """
+
+    list_to_process = df_pl[col_name].to_list()
+
+    # The first sub column will have a vocabulary of {1, 0}. A value equal to 0 for positive numbers and 1 for negative numbers.
+    # In this step we also collect the missing values. There values will have a column with a vocabulary of {0, 1} in the 
+    # sub-columns scheme. The scheme for the sub-columns will be [sign, digit, ..., digit, decimal, ..., missing] with vocabularies
+    # equal to [{0,1}, {0-9}, ..., {0-9}, {0-9}, {0, 1}] 
+    signs_of_items =  [
+    '0'     if pd.isna(item)           else
+    '0'     if not np.isfinite(item)   else   
+    '0'     if item >= 0               else
+    '1'
+    for item in list_to_process
+    ]
+
+    missing_in_items =  [
+    '1'     if pd.isna(item)           else
+    '1'     if not np.isfinite(item)   else   
+    '0'     
+    for item in list_to_process
+    ]
+
+    # The next step is converting the float values into strings for processing. Missing values and np.inf are both treated as missing 
+    col_vals_as_strings = [str(abs(item)) if not (pd.isna(item) or np.isinf(item))  else None for item in list_to_process] 
+
+    # Separating digints from decimals in two distinct lists
+    digits_in_numbers, decimals_in_numbers = zip(*[tuple(item.split(".")) for item in col_vals_as_strings])
+
+    # Computing length of digits
+    len_digits_in_numbers = [len(item) for item in digits_in_numbers]
+    n_digit_sub_cols = max(len_digits_in_numbers)
+
+    # Computing length of decimals
+    len_decimals_in_numbers = [len(item) for item in decimals_in_numbers]
+    n_decimal_sub_cols = max(len_decimals_in_numbers)
+
+    # Computing number of required sub-columns for the variable being processed
+    n_sub_cols = n_digit_sub_cols + n_decimal_sub_cols + 1  + 1 # Adding one for a sub-column to store the sign and another to store NAs
+
+    # Padding digits
+    padded_digits = pad_numeric_digit_col(digits_in_numbers, n_digit_sub_cols, 'left')
+
+    # Padding decimals
+    padded_decimals = pad_numeric_digit_col(decimals_in_numbers, n_decimal_sub_cols, 'right')
+
+    # Generating the values for all sub-columns as strings
+    signs_and_pad_digits = [f"{prefix}{value}" for prefix, value in zip(signs_of_items, padded_digits)]
+    signs_and_pad_digits_and_decimals = [f"{prefix}{value}" for prefix, value in zip(signs_and_pad_digits, padded_decimals)]
+    sub_column_values_as_string = [f"{prefix}{value}" for prefix, value in zip(signs_and_pad_digits_and_decimals, missing_in_items)]
+
+    return n_sub_cols, sub_column_values_as_string  
