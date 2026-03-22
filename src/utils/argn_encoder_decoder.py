@@ -767,7 +767,7 @@ def pad_numeric_digit_col(string_numbers: list[str], max_len: int, direction: st
    return processed_number_strings
 
 
-def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int, list[str]]:
+def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int, int, int, list[str]]:
     """
     Assumes a polars data frame and a column name with float values to be
     encoded following the DIGIT strategy, which generates sub columns.
@@ -783,7 +783,7 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
     Returns:
     -------
 
-    n_sub_cols, n_digit_sub_cols, n_decimal_sub_cols, sub_column_values_as_string : tuple[int, list[str]]
+    n_sub_cols, n_digit_sub_cols, n_decimal_sub_cols, sub_column_values_as_string : tuple[int, int, int, list[str]]
         
         n_sub_cols, the number of sub-columns required to encode col_name 
         following the DIGIT strategy
@@ -835,7 +835,7 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
 
     # Claeaning trailing zeroes introduced in decimals by the f-string method
     decimals_in_numbers = [
-        item.rstrip('0')
+        item.rstrip('0') or '0'
         if item is not None
         else None 
         for item in decimals_in_numbers
@@ -903,7 +903,7 @@ def encode_numerical_digit(df_pl: pl.DataFrame, digit_cols: list[str]) -> tuple[
     """
 
     if len(digit_cols) == 0:
-        return df_pl
+        return df_pl, {}
     
     processed_df = df_pl
 
@@ -975,7 +975,8 @@ def decode_numerical_digit(
         curr_col_encoding = digit_encodings[col_name]
 
         # Collecting all columns needed to decode the float value
-        all_columns_in_encoding = [item for item in df_decoded.columns if re.search(col_name, item, re.IGNORECASE)]
+        # all_columns_in_encoding = [item for item in df_decoded.columns if re.search(col_name, item, re.IGNORECASE)]
+        all_columns_in_encoding =  [item for item in df_decoded.columns if item.startswith(f"{col_name}_")] # trying this approach that seems to be more precise
 
         # Extracting column name for sign and missing
         sign_col = all_columns_in_encoding[0]
