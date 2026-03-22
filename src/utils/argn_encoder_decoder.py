@@ -819,18 +819,44 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
     for item in list_to_process
     ]
 
-    # The next step is converting the float values into strings for processing. Missing values and np.inf are both treated as missing 
-    col_vals_as_strings = [str(abs(item)) if not (pd.isna(item) or np.isinf(item))  else None for item in list_to_process] 
+    # The next step is convert ing the float values into strings for processing. Missing values and np.inf are both treated as missing 
+    col_vals_as_strings = [
+        f"{abs(item):.10f}" # Used f strings to about scientific notation issue that str(abs(item)) brings. Choosing 10f was arbitrary. 
+        if not (pd.isna(item) or np.isinf(item)) 
+        else None 
+        for item in list_to_process
+        ] 
 
     # Separating digints from decimals in two distinct lists
-    digits_in_numbers, decimals_in_numbers = zip(*[tuple(item.split(".")) for item in col_vals_as_strings])
+    digits_in_numbers, decimals_in_numbers = zip(*[
+        tuple(item.split(".")) if item is not None else (None,None)
+        for item in col_vals_as_strings
+        ])
+
+    # Claeaning trailing zeroes introduced in decimals by the f-string method
+    decimals_in_numbers = [
+        item.rstrip('0')
+        if item is not None
+        else None 
+        for item in decimals_in_numbers
+        ]
 
     # Computing length of digits
-    len_digits_in_numbers = [len(item) for item in digits_in_numbers]
+    len_digits_in_numbers = [
+        len(item) 
+        if item is not None
+        else 0
+        for item in digits_in_numbers
+        ]
     n_digit_sub_cols = max(len_digits_in_numbers)
 
     # Computing length of decimals
-    len_decimals_in_numbers = [len(item) for item in decimals_in_numbers]
+    len_decimals_in_numbers = [
+        len(item)
+        if item is not None
+        else 0 
+        for item in decimals_in_numbers
+        ]
     n_decimal_sub_cols = max(len_decimals_in_numbers)
 
     # Computing number of required sub-columns for the variable being processed
