@@ -319,6 +319,7 @@ class ArgnDataset(TabularDatasetProtocol):
         return df_pl
     
     # Class methods I am thinking about implementing
+    # -----------------------------------------------
 
     @property
     def raw_generated_data(self):
@@ -357,6 +358,9 @@ class ArgnDataset(TabularDatasetProtocol):
         ...
 
     def __len__(self):
+        ...
+    
+    def dim(self):
         ...
 
     # Don't know if this is a class method or separate concerns and build this as a function
