@@ -1026,3 +1026,12 @@ def decode_numerical_digit(
         df_decoded = df_decoded.drop(all_columns_in_encoding + [temp_col])
 
     return df_decoded
+
+
+def encode_datetime():
+    raise NotImplementedError("Method not implemented...")
+
+
+def decode_datetime():
+    raise NotImplementedError("Method not implemented...")
+

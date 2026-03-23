@@ -70,6 +70,7 @@ class ArgnDataset(TabularDatasetProtocol):
 
     _raw_data : pd.DataFrame
         A pandas data frame unprocessed
+
     clip_cols : bool, optional, default_value = True
         If True outliers in integer and float columns 
         are clipped to preset percentiles
@@ -77,6 +78,17 @@ class ArgnDataset(TabularDatasetProtocol):
     table : pd.DataFrame
         A copy of the raw data that will be preprocessed and passed
         to the PyTorch Dataset class
+
+    _raw_generated_data : pd.DataFrame, dafault_value = None
+        A pandas data frame with synthetic data generated with T
+        TabularARGN algorithm. Needs to be set using setter
+
+    _decoded_generated_data : pd.DataFrame, dafault_value = None
+        A pandas data frame with synthetic data decoded from
+        _raw_generated_data. Requires _raw_generated_data != None
+        to be set
+    
+    # PENDING TASK -> Complete attributes
     """
 
     def __init__(self, _raw_data: pd.DataFrame, clip_cols: Optional[bool] = True):
@@ -96,6 +108,8 @@ class ArgnDataset(TabularDatasetProtocol):
         self._table_pd = None
         self.clip_cols = clip_cols
         self._table = self.load_data(self._raw_data)
+        self._raw_generated_data = None
+        self._decoded_generated_data = None
 
 
     @property
@@ -303,6 +317,55 @@ class ArgnDataset(TabularDatasetProtocol):
         # Recoding columns with datetime data types
 
         return df_pl
+    
+    # Class methods I am thinking about implementing
+
+    @property
+    def raw_generated_data(self):
+        return self._raw_generated_data
+
+    @raw_generated_data.setter
+    def raw_generated_data(self, pd_df: pd.DataFrame):
+        if not isinstance(pd_df, pd.DataFrame):
+            raise TypeError("Generated data must be a pandas data frame")
+        self._raw_generated_data = pd_df
+        self._decoded_generated_data = None
+
+    # def set_raw_generated_data(self):
+    #     # Attribute: _raw_generated_data
+    #     raise NotImplementedError("Method not implemented...")
+
+    # def decode_synthetic_data(self):
+    #     # Attribute: _decoded_generated_data
+    #     raise NotImplementedError("Method not implemented...")
+
+    def __iter__(self):
+        ...
+
+    def __repr__(self):
+        ...
+
+    def __str__(self):
+        ...
+
+    def __eq__(self):
+        # Could be ambiguous, but needed. I need to thnk what makes two datasets equal. 
+        # Probably the raw data and the transformed dataset.
+        ...
+
+    def  __hash__(self):
+        ...
+
+    def __len__(self):
+        ...
+
+    # Don't know if this is a class method or separate concerns and build this as a function
+    # def save(self, path: str) -> None:
+    #     raise NotImplementedError("Method not implemented...")
+
+    # @classmethod
+    # def load(cls, path: str) -> "ArgnDataset":
+    #     raise NotImplementedError("Method not implemented...")
 
 def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> dict[str,str]:
     """
@@ -481,4 +544,5 @@ def clip_columns(df_pl: pl.DataFrame, cols_to_process: list[tuple[str,int]], low
         processed_df = processed_df.with_columns(pl.col(col_name).clip(lower, upper))
 
     return processed_df
+
 
