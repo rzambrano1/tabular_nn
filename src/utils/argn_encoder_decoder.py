@@ -160,13 +160,13 @@ def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tu
     
     categorical_encode_maps = {}
 
-    for col, i in cat_cols:
-        unique_vals = df_pl[:, i].unique().to_list()
+    for col_name, i in cat_cols:
+        unique_vals = df_pl[col_name].unique().to_list()
         
         if len(unique_vals) > nrow/3:
-            warnings.warn(f"Check {col} does not contain open ended values. This implementation only process categorical levels...")
+            warnings.warn(f"Check {col_name} does not contain open ended values. This implementation only process categorical levels...")
 
-        map_name = col
+        map_name = col_name
 
         categorical_encode_maps[map_name] = {
             val: idx for idx, val in enumerate(unique_vals)
@@ -252,7 +252,7 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     numerical_discrete_encodng_maps = {}
 
     for col_name, i in discrete_cols:
-        unique_vals = df_pl[:, i].unique().to_list()
+        unique_vals = df_pl[col_name].unique().to_list()
 
         map_name = col_name
 

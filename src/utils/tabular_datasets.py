@@ -96,9 +96,31 @@ class ArgnDataset(TabularDatasetProtocol):
     # for self._duration_columns assumes duration columns smaller component are seconds
     """
 
-    def __init__(self, _raw_data: pd.DataFrame, clip_cols: Optional[bool] = True):
+    def __init__(
+            self, 
+            _raw_data: pd.DataFrame, 
+            clip_cols: Optional[bool] = True,
+            encode_datetime_as_discrete: Optional[bool] = True,
+            set_seed: Optional[int] = 42
+            ):
 
         """
+        Parameters:
+        ----------
+
+        _raw_data: pd.DataFrame, 
+            A pandas dataframe to be processed
+        clip_cols: Optional[bool], default_value = True,
+            A boolean parameter, if True outlier values are clipped
+            to prevent identification of observations with unusual
+            or extreme values
+        encode_datetime_as_discrete: Optional[bool], default_value = True,
+            A boolean parameter, if True features in the family of datetime 
+            data types are encoded twice: first into sub-columns and then
+            as integer levels. If False encoding consist only in sub-columns 
+        set_seed: int, default_value = 42
+            Sets a seed for reproducibility
+
         Raises:
         -------
 
@@ -109,12 +131,18 @@ class ArgnDataset(TabularDatasetProtocol):
         if not isinstance(_raw_data, pd.DataFrame):
             raise TypeError(f"Instances of {self.__class__.__name__} can only be initiated with pandas.DataFrame objects...")
         
+        random.seed(set_seed)
+
         self._raw_data = _raw_data
         self._table_pd = None
         self.clip_cols = clip_cols
+        self.encode_datetime_as_discrete = encode_datetime_as_discrete
         self._table = self.load_data(self._raw_data)
+        
+        # Atribute for post-processing
         self._raw_generated_data = None
         self._decoded_generated_data = None
+        
 
 
     @property
@@ -187,8 +215,6 @@ class ArgnDataset(TabularDatasetProtocol):
                     pl.col(col_name).dt.total_seconds().cast(pl.Int64).alias(col_name) # Assumes duration columns smaller component are seconds
                 )
 
-                # self._numerical_discrete_columns.append((col_name, col_idx)) # I thought about rerouting this to discrete, but paper does not mention encoding daetimes
-
         # Casting into Int64 float columns that contain integers
         for col, _ in self._float_columns_to_cast_to_integer:
             df_pl = df_pl.with_columns(
@@ -220,6 +246,13 @@ class ArgnDataset(TabularDatasetProtocol):
         self.numerical_discrete_encoding_maps = generate_numerical_discrete_encoding_mappings(df_pl, self._numerical_discrete_columns)
 
         self.numerical_discrete_decoding_maps = generate_numeric_discrete_decoding_mappings(self.numerical_discrete_encoding_maps)
+
+        # Initializing mappings for datetime types. Set to a value other than None if encode_datetime_as_discrete == True
+        self.datetime_discretized_encoding_maps = {}
+
+        self.datetime_discretized_decoding_maps = {}
+
+        self._datetime_discretized_subcols_names = []
 
         # Encoding Strategy
         # -----------------
@@ -341,9 +374,11 @@ class ArgnDataset(TabularDatasetProtocol):
         # Casting float columns with discrete values as Int64
         if len(float_to_int_cols) > 0:
             df_pl = discrete_float_into_int(df_pl, float_to_int_cols)
+
         # Recoding columns with integer data types
         if len(numerical_discrete_cols) > 0:
             df_pl = encode_numerical_discrete(df_pl, num_discrete_encoding, [item[0] for item in numerical_discrete_cols])
+
         # Recoding columns with float data types
         
         # BINNED
@@ -357,6 +392,32 @@ class ArgnDataset(TabularDatasetProtocol):
         # Encoding columns with datetime data types
         if len(datetime_cols) > 0:
             df_pl, self.datetime_encoding_map = encode_datetime(df_pl, [item[0] for item in  datetime_cols])
+
+        if self.encode_datetime_as_discrete:
+
+            date_time_col_prefixes = [item[0] for item in self._datetime_columns + self._duration_columns]
+            
+            date_time_subcols = []
+
+            for col_name_prefix in date_time_col_prefixes:
+                
+                curr_prefix_subcols = []
+                
+                for i, subcol_name in enumerate(df_pl.columns): 
+                    
+                    if subcol_name.startswith(f"{col_name_prefix}_") or subcol_name in self._duration_columns:
+
+                        curr_prefix_subcols.append((subcol_name, i))
+
+                date_time_subcols = date_time_subcols + curr_prefix_subcols
+
+            self._datetime_discretized_subcols_names = date_time_subcols
+
+            self.datetime_discretized_encoding_maps = generate_numerical_discrete_encoding_mappings(df_pl, date_time_subcols)
+
+            self.datetime_discretized_decoding_maps = generate_numeric_discrete_decoding_mappings(self.datetime_discretized_encoding_maps)
+
+            df_pl = encode_numerical_discrete(df_pl, self.datetime_discretized_encoding_maps, [item[0] for item in date_time_subcols])
 
         # Casting boolean columns into integers
 
