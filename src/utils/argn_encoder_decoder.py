@@ -956,7 +956,7 @@ def decode_numerical_digit(
     df_pl : pl.DataFrame
         A polars data frame with digit-encoded sub-columns
     digit_cols: list[str]
-        Columns to encode following the DIGIT strategy
+        Columns to decode following the DIGIT strategy
     digit_encodings : dict[str, tuple[int, int]]
         The encoding scheme for each column, with the column name as key
         and a tuple with the number of decimal and digits as values 
@@ -1107,8 +1107,85 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> tuple[pl.D
     return processed_df, datetime_type_mapping
 
 
-def decode_datetime():
-    raise NotImplementedError("Method not implemented...")
+def decode_datetime(
+        df_pl: pl.DataFrame,
+        datetime_columns: list[str],
+        datetime_encoding_map: dict[str, str]) -> pl.DataFrame:
+    """
+    Reconstructs float columns from their digit sub-column encoding.
 
+    Encoding schema per original column:
+        col_1:            sign indicator          (0 = positive, 1 = negative)
+        col_2...col_n-1:  digit sub-columns       (integer digits then decimal digits - The vocabulary of each column is 0-9)
+        col_n:            missing indicator       (1 = null, 0 = valid value)
 
+    Parameters:
+    ----------
 
+    df_pl : pl.DataFrame
+        A polars data frame with datetime-encoded sub-columns
+    datetime_columns : list[str]
+        Columns to dencode by reconstructing data/time data spread into
+         multiple sub-columns components
+    datetime_encoding_map : dict[str, str]
+        The encoding scheme for each column, with the column name as key
+        and a the data type  of the column in the original data set  
+
+    Returns:
+    -------
+    df_decoded : pl.DataFrame
+        Dataframe with pl.Datetime and pl.Date sub-columns have been reconstructed 
+        and replaced by individual columns
+    """
+
+    df_decoded = df_pl
+
+    for col_name in datetime_columns:
+
+        encoding_map = datetime_encoding_map
+        curr_col_type = encoding_map[col_name] 
+        
+        curr_subcol_names = {c: pl.col(c) for c in df_decoded.columns if c.startswith(f"{col_name}_")} 
+
+        def get(name, default):
+            """Helper function to retrive each component value of datetime / time data types"""
+            return curr_subcol_names.get(f"{col_name}_{name}", pl.lit(default))
+        
+        if curr_col_type == pl.Datetime:
+
+            df_decoded = df_decoded.with_columns(
+                pl.datetime(
+                    get("year", 1970),
+                    get("month", 1),
+                    get("day", 1),
+                    get("hour", 0),
+                    get("minute", 0),
+                    get("second", 0),
+                    get("millisecond", 0),
+                ).alias(col_name)
+            )
+
+        elif curr_col_type == pl.Date:
+
+            df_decoded = df_decoded.with_columns(
+                pl.date(
+                    get("year", 1970),
+                    get("month", 1),
+                    get("day", 1),
+                ).alias(col_name)
+            )
+
+        elif curr_col_type == pl.Time:
+
+            df_decoded = df_decoded.with_columns(
+                pl.time(
+                    get("hour", 0),
+                    get("minute", 0),
+                    get("second", 0),
+                    get("millisecond", 0),
+                ).alias(col_name)
+            )
+
+        df_decoded = df_decoded.drop(list(curr_subcol_names.keys()))
+    
+    return df_decoded
