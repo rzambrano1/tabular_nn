@@ -1028,7 +1028,7 @@ def decode_numerical_digit(
     return df_decoded
 
 
-def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFrame:
+def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> tuple[pl.DataFrame, dict[str,str]]:
     """
     Assumes a polars data frame and a list of columns to process with datetime values
     returns a processed data frame with encoded datetime types into subcolumns.
@@ -1048,12 +1048,16 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFra
 
     processed_df : pl.DataFrame
         A data frame with datetime columns encoded into subcolumns. 
+    datetime_type_mapping : dict[str,str]
+        A helper dict mapping the specific datetime type of each 
+        date/time columns
     """
 
     if len(datetime_cols) == 0:
         return df_pl
 
     processed_df = df_pl
+    datetime_type_mapping = {}
 
     COMPONENTS_BY_DTYPE = {
         pl.Datetime: ["year", "month", "day", "hour", "minute", "second", "millisecond"],
@@ -1064,9 +1068,10 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFra
     
     for col_name in datetime_cols:
     
-        # Step 1: Extract current column data type
+        # Step 1: Extract current column data type and recording in helper mapping
         col_datetime_type = type(processed_df[col_name].dtype)
-        
+        datetime_type_mapping[col_name] = col_datetime_type
+
         # Step 2: Find the valid components for a given column with a given date/time [sub]type
         if col_datetime_type == pl.Duration: # Guard in case a pl.Duration made it here
             continue
@@ -1083,7 +1088,7 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFra
 
             component_unique_values = processed_df[col_name].dt.__getattribute__(valid_component)().drop_nulls().n_unique()
             
-            if component_unique_values > 1:
+            if component_unique_values >= 1 and component_unique_values != 0:
                 components_in_curr_col.append(valid_component)
         
         # Step 4: Creating sub columns
@@ -1097,9 +1102,9 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFra
                     for component in components_in_curr_col
             ])
 
-        processed_df = processed_df.drop(col_name)
+            processed_df = processed_df.drop(col_name)
     
-    return processed_df
+    return processed_df, datetime_type_mapping
 
 
 def decode_datetime():

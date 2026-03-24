@@ -46,6 +46,10 @@ from .argn_encoder_decoder import BinDesign, get_bin_designs, generate_numerical
 
 from .argn_encoder_decoder import encode_numerical_digit
 
+# Functions for datetime
+
+from .argn_encoder_decoder import encode_datetime
+
 #########################
 # Functions and Classes #
 #########################
@@ -150,7 +154,7 @@ class ArgnDataset(TabularDatasetProtocol):
         # Data frame column name and data types
         self.col_names = df_pl.columns
 
-        self.dtypes = [str(df_pl[name].dtype) for name in self.col_names]
+        self.dtypes = [str(df_pl[name].dtype.base_type()) for name in self.col_names]
 
         # Data frame metadata
         (self._categorical_columns,
@@ -178,7 +182,7 @@ class ArgnDataset(TabularDatasetProtocol):
                 if (col_name, col_idx) not in self._duration_columns
             ]
             
-            for col_name, col_idx in self._duration_columns:
+            for col_name, _ in self._duration_columns:
                 df_pl = df_pl.with_columns(
                     pl.col(col_name).dt.total_seconds().cast(pl.Int64).alias(col_name) # Assumes duration columns smaller component are seconds
                 )
@@ -257,8 +261,11 @@ class ArgnDataset(TabularDatasetProtocol):
             numerical_binned_cols = self._numerical_binned_columns,
             binned_strategy_design = self._column_binned_designs, 
             # Numerical Digit
-            numerical_digit_cols = self._numerical_digit_columns
+            numerical_digit_cols = self._numerical_digit_columns,
             # Datetime
+            datetime_cols = self._datetime_columns,
+            # Bool
+            bool_cols = self._bool_columns
             )
 
         return df_pl
@@ -275,7 +282,9 @@ class ArgnDataset(TabularDatasetProtocol):
             num_binned_encoding: dict[dict[str,int]],
             numerical_binned_cols: list[tuple[str,int]],
             binned_strategy_design: dict[str,BinDesign],
-            numerical_digit_cols: list[tuple[str,int]]
+            numerical_digit_cols: list[tuple[str,int]],
+            datetime_cols: list[tuple[str,int]],
+            bool_cols: list[tuple[str,int]]
             ) -> pl.DataFrame:
         """
         Method to preprocess a polars data frame in accordance to tabularARGN
@@ -284,6 +293,11 @@ class ArgnDataset(TabularDatasetProtocol):
         TabularARGN models exclusively operate on categorical columns, all other data 
         types are converted into one or more categorical sub-columns using specific 
         encoding strategies.
+
+        Columns lists in the functions take a list of strings as arguments. Note
+        that the data structure for columns lists are a list of a tuples with 
+        (column name, column index). Thus list comprenhension must be passed to
+        processing columns.
         
         Parametrs:
         ---------
@@ -306,6 +320,10 @@ class ArgnDataset(TabularDatasetProtocol):
             A list of the columns following the BINNED strategy
         binned_strategy_design: dict[str,BinDesign]
             A dict storing the encoding strategy for columns encoded using BINNED
+        numerical_digit_cols : list[tuple[str,int]]
+            A list of columns following the DIGIT encoding strategy
+        datetime_cols : list[tuple[str,int]]
+            A list of columns with datetime columns to be processesed 
         
         Returns:
         -------
@@ -333,11 +351,22 @@ class ArgnDataset(TabularDatasetProtocol):
             df_pl = encode_numerical_binned(df_pl, num_binned_encoding, [item[0] for item in numerical_binned_cols], binned_strategy_design)
 
         # DIGIT
+        if len(numerical_digit_cols) > 0:
+            df_pl, self.numerical_digit_encoding_maps = encode_numerical_digit(df_pl, [item[0] for item in numerical_digit_cols])
 
-        df_pl, self.numerical_digit_encoding_maps = encode_numerical_digit(df_pl, [item[0] for item in numerical_digit_cols])
+        # Encoding columns with datetime data types
+        if len(datetime_cols) > 0:
+            df_pl, self.datetime_encoding_map = encode_datetime(df_pl, [item[0] for item in  datetime_cols])
 
-        # Recoding columns with datetime data types
+        # Casting boolean columns into integers
 
+        if len(bool_cols) > 0: 
+            boolean_columns_list, _ = zip(*bool_cols)
+            for col_name in  boolean_columns_list:
+                df_pl = df_pl.with_columns(
+                    pl.col(col_name).cast(pl.Int8)
+                )
+                
         return df_pl
     
     # Class methods I am thinking about implementing
