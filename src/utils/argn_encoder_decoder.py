@@ -1028,10 +1028,82 @@ def decode_numerical_digit(
     return df_decoded
 
 
-def encode_datetime():
-    raise NotImplementedError("Method not implemented...")
+def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> pl.DataFrame:
+    """
+    Assumes a polars data frame and a list of columns to process with datetime values
+    returns a processed data frame with encoded datetime types into subcolumns.
+
+    It does not process pl.Duration columns.
+
+    Parameters:
+    ----------
+
+    df_pl : pl.DataFrame 
+        A polars data frame
+    datetime_cols: list[str]
+        Columns to encode into subcolumns
+    
+    Returns:
+    -------
+
+    processed_df : pl.DataFrame
+        A data frame with datetime columns encoded into subcolumns. 
+    """
+
+    if len(datetime_cols) == 0:
+        return df_pl
+
+    processed_df = df_pl
+
+    COMPONENTS_BY_DTYPE = {
+        pl.Datetime: ["year", "month", "day", "hour", "minute", "second", "millisecond"],
+        pl.Date:     ["year", "month", "day"],
+        pl.Time:     ["hour", "minute", "second", "millisecond"],
+        # pl.Duration: ["total_seconds"], # Handle as a scalar value
+    }
+    
+    for col_name in datetime_cols:
+    
+        # Step 1: Extract current column data type
+        col_datetime_type = type(processed_df[col_name].dtype)
+        
+        # Step 2: Find the valid components for a given column with a given date/time [sub]type
+        if col_datetime_type == pl.Duration: # Guard in case a pl.Duration made it here
+            continue
+        elif col_datetime_type in COMPONENTS_BY_DTYPE:
+            curr_col_valid_components = COMPONENTS_BY_DTYPE[col_datetime_type]
+        else:
+            raise ValueError("datetime_columns contains non-datetime data types...")
+        
+        # Step 3: Collecting components 
+
+        components_in_curr_col = []
+
+        for valid_component in curr_col_valid_components:
+
+            component_unique_values = processed_df[col_name].dt.__getattribute__(valid_component)().drop_nulls().n_unique()
+            
+            if component_unique_values > 1:
+                components_in_curr_col.append(valid_component)
+        
+        # Step 4: Creating sub columns
+
+        if len(components_in_curr_col) > 0:
+
+            processed_df = processed_df.with_columns([
+                getattr(pl.col(col_name).dt, component)()
+                .cast(pl.Int32)
+                .alias(f"{col_name}_{component}")
+                    for component in components_in_curr_col
+            ])
+
+        processed_df = processed_df.drop(col_name)
+    
+    return processed_df
 
 
 def decode_datetime():
     raise NotImplementedError("Method not implemented...")
+
+
 

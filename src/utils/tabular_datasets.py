@@ -89,6 +89,7 @@ class ArgnDataset(TabularDatasetProtocol):
         to be set
     
     # PENDING TASK -> Complete attributes
+    # for self._duration_columns assumes duration columns smaller component are seconds
     """
 
     def __init__(self, _raw_data: pd.DataFrame, clip_cols: Optional[bool] = True):
@@ -162,6 +163,27 @@ class ArgnDataset(TabularDatasetProtocol):
 
         # Transformations
         # ---------------
+
+        # Separating datetime columns from duration columns, then casting duration as a scalar
+        self._duration_columns = [
+            (col_name, col_idx) 
+            for col_name, col_idx in self._datetime_columns 
+            if isinstance(df_pl[col_name].dtype, pl.Duration)
+        ]
+        
+        if len(self._duration_columns) > 0:
+            self._datetime_columns = [
+                (col_name, col_idx) 
+                for col_name, col_idx in self._datetime_columns 
+                if (col_name, col_idx) not in self._duration_columns
+            ]
+            
+            for col_name, col_idx in self._duration_columns:
+                df_pl = df_pl.with_columns(
+                    pl.col(col_name).dt.total_seconds().cast(pl.Int64).alias(col_name) # Assumes duration columns smaller component are seconds
+                )
+
+                # self._numerical_discrete_columns.append((col_name, col_idx)) # I thought about rerouting this to discrete, but paper does not mention encoding daetimes
 
         # Casting into Int64 float columns that contain integers
         for col, _ in self._float_columns_to_cast_to_integer:
