@@ -161,7 +161,7 @@ def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tu
     categorical_encode_maps = {}
 
     for col_name, i in cat_cols:
-        unique_vals = df_pl[col_name].unique().to_list()
+        unique_vals = df_pl[col_name].unique().sort().to_list() # Adding sort to make the mappings more deterministic
         
         if len(unique_vals) > nrow/3:
             warnings.warn(f"Check {col_name} does not contain open ended values. This implementation only process categorical levels...")
@@ -252,7 +252,7 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     numerical_discrete_encodng_maps = {}
 
     for col_name, i in discrete_cols:
-        unique_vals = df_pl[col_name].unique().to_list()
+        unique_vals = df_pl[col_name].unique().sort().to_list() # Adding sort to make the mappings more deterministic
 
         map_name = col_name
 
@@ -434,7 +434,7 @@ def get_bin_designs(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> di
         edges_diff = len(edges) - len(unique_edges)
         if edges_diff > 0:
             edges = unique_edges
-            n_bins = n_bins - edges_diff
+            n_bins = len(unique_edges) - 1 # n_bins = n_bins - edges_diff 
 
         columns_bin_designs[col_name] = BinDesign(n_bins, edges)
     
@@ -1054,7 +1054,7 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> tuple[pl.D
     """
 
     if len(datetime_cols) == 0:
-        return df_pl
+        return df_pl, {}
 
     processed_df = df_pl
     datetime_type_mapping = {}

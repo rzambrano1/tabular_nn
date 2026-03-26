@@ -132,6 +132,7 @@ class ArgnDataset(TabularDatasetProtocol):
             raise TypeError(f"Instances of {self.__class__.__name__} can only be initiated with pandas.DataFrame objects...")
         
         random.seed(set_seed)
+        np.random.seed(set_seed)
 
         self._raw_data = _raw_data
         self._table_pd = None
@@ -230,7 +231,8 @@ class ArgnDataset(TabularDatasetProtocol):
 
         if self.clip_cols:
             # Integer
-            df_pl = clip_columns(df_pl, self._numerical_discrete_columns, lower_quantile = 0.01, upper_quantile = 0.99) 
+            # Not needed, clipping ZIP codes will result in missing information
+
             # Float
             df_pl = clip_columns(df_pl, self._numerical_float_columns, lower_quantile = 0.01, upper_quantile = 0.99)   
 
@@ -399,13 +401,15 @@ class ArgnDataset(TabularDatasetProtocol):
             
             date_time_subcols = []
 
+            duration_col_names = {dur_col_name for dur_col_name, _ in self._duration_columns}
+
             for col_name_prefix in date_time_col_prefixes:
                 
                 curr_prefix_subcols = []
                 
                 for i, subcol_name in enumerate(df_pl.columns): 
                     
-                    if subcol_name.startswith(f"{col_name_prefix}_") or subcol_name in self._duration_columns:
+                    if subcol_name.startswith(f"{col_name_prefix}_") or (subcol_name in duration_col_names):
 
                         curr_prefix_subcols.append((subcol_name, i))
 
@@ -513,17 +517,23 @@ def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]
     for col in float_col_names:
 
         numbers_to_analyze = df_pl[col].drop_nulls().to_list() # .drop_nulls() to avoid TypeError due to propagation of nulls
-        string_numbers = [str(abs(number)) for number in numbers_to_analyze] 
-        splited_numbers = [tuple(str_number.split('.')) for str_number in string_numbers]
-        
-        integers_in_numbers, decimals_in_numbers = zip(*splited_numbers)
 
-        integer_lenghs = [len(integer) for integer in integers_in_numbers]
-        decimal_lenghts = [len(decimal) for decimal in decimals_in_numbers]
+        integer_lengths = []
+        decimal_lengths = []
 
-        max_decimal_places = max(integer_lenghs)
+        for number in numbers_to_analyze:
 
-        max_num_digits = max(decimal_lenghts)
+            formatted = f"{abs(number):.10f}"
+            int_part, dec_part = formatted.split('.')
+
+            dec_part = dec_part.rstrip('0') or '0'
+            int_part = int_part.lstrip('0') or '0'
+             
+            integer_lengths.append(len(int_part))
+            decimal_lengths.append(len(dec_part))
+
+        max_num_digits = max(integer_lengths)
+        max_decimal_places = max(decimal_lengths)
 
         if max_decimal_places <=2:
             col_encoding_strategy[col] = "BINNED"
