@@ -1063,7 +1063,7 @@ def encode_datetime(df_pl: pl.DataFrame, datetime_cols: list[str]) -> tuple[pl.D
         pl.Datetime: ["year", "month", "day", "hour", "minute", "second", "millisecond"],
         pl.Date:     ["year", "month", "day"],
         pl.Time:     ["hour", "minute", "second", "millisecond"],
-        # pl.Duration: ["total_seconds"], # Handle as a scalar value
+        # pl.Duration: ["total_seconds"], # Handles as a scalar value separatedly
     }
     
     for col_name in datetime_cols:

@@ -69,31 +69,150 @@ class ArgnDataset(TabularDatasetProtocol):
     The class has methods to preprocess the data frame in 
     accordance with the specifications of the TabularARGN model.
 
+    Assumes that columns with open-ended text have been dropped 
+    by the client. Columns with strings will be assumed to have 
+    string levels. A warning will be given for columns where the
+    number of unique integer levels is greater than 1/3 of the
+    number of rows.
+
     Attributes:
     ----------
 
-    _raw_data : pd.DataFrame
-        A pandas data frame unprocessed
-
+    # --- Parameters ---
+    
     clip_cols : bool, optional, default_value = True
         If True outliers in integer and float columns 
         are clipped to preset percentiles
     
-    table : pd.DataFrame
-        A copy of the raw data that will be preprocessed and passed
-        to the PyTorch Dataset class
+    set_seed : int, optional, default_value = True
+        An integer to set a random seed for random
+        and numpy libraries
 
-    _raw_generated_data : pd.DataFrame, dafault_value = None
-        A pandas data frame with synthetic data generated with T
-        TabularARGN algorithm. Needs to be set using setter
-
-    _decoded_generated_data : pd.DataFrame, dafault_value = None
-        A pandas data frame with synthetic data decoded from
-        _raw_generated_data. Requires _raw_generated_data != None
-        to be set
+    # --- Raw Data ---
     
-    # PENDING TASK -> Complete attributes
-    # for self._duration_columns assumes duration columns smaller component are seconds
+    _raw_data : pd.DataFrame
+        A pandas data frame unprocessed
+
+    self.nrow : int
+        Number of rows in original data frame
+
+    self.ncol : int
+        Number of columns in the original data frame
+
+    self.table_dim : tuple[int, int]
+        Dimentions of the original data frame in the
+        (number of rows, number of columns) format
+
+    self.col_names : list[str]
+        Column names in the original data frame
+
+    self.dtypes : list[str]
+        The data types of each column in the original 
+        data frame
+    
+    # --- Processed Data ---
+
+    self._table : pl.DataFrame
+        The postprocessed data frame after undergoing all
+        transformation and encodings per TabularARGN paper
+
+    table : pd.DataFrame
+        A copy of the _table casted into a pandas data frame
+        this object will be be passed to the PyTorch Dataset class    
+
+    # --- Columns Metadata ---
+
+    self._categorical_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that contain categorical data encoded as string levels
+        in the original data frame
+
+    self._numerical_discrete_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that contain integer data encoding integer levels in the 
+        original data frame
+
+    self._float_columns_to_cast_to_integer : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that originaly had foat values with no relevant decimals
+        (e.g. 10.0) and were casted as integers by the preprocessing 
+        pipeline. Indeces correspond the original data frame
+
+    self._numerical_float_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that contain float values in the original data frame
+
+    self._datetime_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that contain date time, date, or time data type values 
+        in the original data frame
+
+    self._duration_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that contain duration type values in the original data frame.
+        Duration columns are all casted into seconds
+
+    self._bool_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        of columns that contain boolean values in the original data 
+        frame.
+
+    self._incompatible_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        of columns in the original data set that contain data types.
+        Not suported types include: binary, list, array, and struct.
+        These columns are dropped in the preprocessing pipeline.
+
+    self._numerical_binned_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that were encoded by the preprocessing pipeline using the
+        BINNED strategy as described by the TabularARGN paper.
+
+    self._numerical_digit_columns : list[tuple[str,int]]
+        A list of tuples in the (column name, column index) format
+        that were encoded by the preprocessing pipeline using the
+        DIGIT strategy as described by the TabularARGN paper.
+
+    # --- Encoding Maps ---
+
+    self.categorical_encoding_maps : dict[dict[str,int]]
+        A dictionary with dictionaries that map uniques levels 
+        to integers
+
+    self.categorical_decoding_maps : dict[dict[int,str]]
+        A decoding map to restore encoded data back into its 
+        original form
+
+    self.numerical_discrete_encoding_maps : dict[dict[int,int]]
+        A dictionary with dictionaries that map uniques levels to integers
+
+    self.numerical_discrete_decoding_maps : dict[dict[int,int]]
+        A decoding map to restore encoded data back into its original form
+
+    self.numerical_binned_encoding_maps : dict[dict[tuple[float,float], int]]
+        A dictionary containing dictionaries that map intervals to integers.
+        Outer key: column name
+        Inner dict: maps (lower_edge, upper_edge) tuples to int category index
+                    None mapped to  0  (reserved for missing values)
+
+    self.numerical_binned_decoding_maps : dict[dict[int, tuple[float,float]]]
+        A decoding map to restore encoded data back into its intermediate form.
+        Outer key: column name
+        Inner dict: maps integer level back to (lower_edge, upper_edge) tuples 
+                    0 mapped to  None  (reserved for missing values)
+
+    self.numerical_digit_encoding_maps : dict[str, tuple[int,int]]
+        The encoding scheme for each column, with the column name as key
+        and a tuple with the number of decimal and digits as values 
+
+    self.datetime_encoding_map : dict[str,str]
+        A helper dict mapping the specific datetime type of each 
+        date/time columns
+
+    self._numeric_strategy : dict[str,str]
+        A dictionary with the column name as key and encoding strategy as value
+        for each column containing float
+
     """
 
     def __init__(
@@ -140,17 +259,11 @@ class ArgnDataset(TabularDatasetProtocol):
         self.encode_datetime_as_discrete = encode_datetime_as_discrete
         self._table = self.load_data(self._raw_data)
         
-        # Atribute for post-processing
-        self._raw_generated_data = None
-        self._decoded_generated_data = None
-        
-
 
     @property
     def table(self):
-        if self._table_pd is None:
-            self._table_pd = self._table.to_pandas()
-        return self._table_pd
+        return self._table.to_pandas()
+        
         
     def load_data(self, df_pd: pd.DataFrame) -> pl.DataFrame:
         """
@@ -173,7 +286,7 @@ class ArgnDataset(TabularDatasetProtocol):
         # Data Frame Metadata
         # -------------------
 
-        # Data fraame dimensions
+        # Data frame dimensions
         self.nrow = df_pl.height
         
         self.ncol = df_pl.width
@@ -434,30 +547,6 @@ class ArgnDataset(TabularDatasetProtocol):
                 
         return df_pl
     
-    # Class methods I am thinking about implementing
-    # -----------------------------------------------
-
-    @property
-    def raw_generated_data(self):
-        return self._raw_generated_data
-
-    @raw_generated_data.setter
-    def raw_generated_data(self, pd_df: pd.DataFrame):
-        if not isinstance(pd_df, pd.DataFrame):
-            raise TypeError("Generated data must be a pandas data frame")
-        self._raw_generated_data = pd_df
-        self._decoded_generated_data = None
-
-    # def set_raw_generated_data(self):
-    #     # Attribute: _raw_generated_data
-    #     raise NotImplementedError("Method not implemented...")
-
-    # def decode_synthetic_data(self):
-    #     # Attribute: _decoded_generated_data
-    #     raise NotImplementedError("Method not implemented...")
-
-    def __iter__(self):
-        ...
 
     def __repr__(self):
         ...
@@ -465,27 +554,22 @@ class ArgnDataset(TabularDatasetProtocol):
     def __str__(self):
         ...
 
-    def __eq__(self):
-        # Could be ambiguous, but needed. I need to thnk what makes two datasets equal. 
-        # Probably the raw data and the transformed dataset.
-        ...
-
-    def  __hash__(self):
-        ...
+    def __eq__(self,other):
+        """
+        Two data sets are equal if their raw dataset and the trasformed
+        data set are equal
+        """
+        return (
+            self._raw_data.equals(other._raw_data) and
+            self._table.frame_equal(other._table)
+        )
 
     def __len__(self):
-        ...
+        """
+        Returns the number of rows in the dataset
+        """
+        return self.nrow
     
-    def dim(self):
-        ...
-
-    # Don't know if this is a class method or separate concerns and build this as a function
-    # def save(self, path: str) -> None:
-    #     raise NotImplementedError("Method not implemented...")
-
-    # @classmethod
-    # def load(cls, path: str) -> "ArgnDataset":
-    #     raise NotImplementedError("Method not implemented...")
 
 def select_numeric_strategy(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> dict[str,str]:
     """
