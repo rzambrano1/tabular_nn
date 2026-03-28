@@ -1,10 +1,9 @@
 # TabularNN: Advanced Synthetic Data Generation
 
-[![Tests](https://github.com/rzambrano1/architecture_and_design_patterns/actions/workflows/tests.yml/badge.svg)](https://github.com/rzambrano1/architecture_and_design_patterns/actions/workflows/tests.yml)
-[![GitHub release](https://img.shields.io/github/v/release/rzambrano1/architecture_and_design_patterns)](https://github.com/rzambrano1/architecture_and_design_patterns/releases)
+[![Tests](https://github.com/rzambrano1/tabular_nn/actions/workflows/test.yml/badge.svg)](https://github.com/rzambrano1/tabular_nn/actions/workflows/tests.yml)
+[![GitHub release](https://img.shields.io/github/v/release/rzambrano1/tabular_nn)](https://github.com/rzambrano1/tabular_nn/releases)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
-
 
 ## Project Under Construction
 **Status:** Alpha / Active Development  
