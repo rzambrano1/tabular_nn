@@ -1,0 +1,27 @@
+Metadata-Version: 2.4
+Name: tabular_nn
+Version: 0.1.0
+Summary: A tabular synthetic data generation system for research and testing multiple network architectures including: TabularARGN, TabSyn, TabDIFF, TabDiT, CTTVAE, and ADAPT-RL
+Author-email: Ricardo Zambrano <rzambrano@gmail.com>
+License: CC-BY-NC-4.0
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: tox; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Dynamic: license-file
+
+# TabularNN: Advanced Synthetic Data Generation
+
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
+
+## Project Under Construction
+**Status:** Alpha / Active Development  
+**Current Focus:** Implementing TabularARGN encoding logic.
+
+This repository serves as a research sandbox for the implementation and benchmarking of high-fidelity synthetic data generation frameworks. The project explores a diverse range of modern architectures, including Auto-Regressive Generative Networks (TabularARGN), Diffusion-based models (TabDiff, TabSyn, TabDit), Generative Moment-matching (GEM-T), Conditional Variational Autoencoders (CTTVAE), and ADAPT-RL.

@@ -10,6 +10,9 @@ is implementing a rough solution, develop a roboust test suite, and
 run tests afterwards.
 """
 
+def test_eq_implementation():
+    pass
+
 def test_get_bin_designs_with_negative_numbers():
     pass
 

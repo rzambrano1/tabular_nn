@@ -12,3 +12,78 @@ license = {text = "CC-BY-NC-4.0"}
 authors = [
     {name = "Ricardo Zambrano", email = "rzambrano@gmail.com"}
     ]
+
+[project.optional-dependencies]
+
+dev = [
+    "pytest",
+    "pytest-cov",
+    "tox",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["*.mypy_cache*", "*.tests*", "*.test*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = [
+    "--cov", 
+    "--strict-markers",   # makes pytest fail if you use an undefined marker
+    "-v",                 # add verbose output
+    # "--setup-show",     # add fixture setup/teardown info
+    ]
+testpaths = [
+    "test"
+]
+xfail_strict = true # treats tests marked as "expected to fail" (xfail) as a failure if they actually pass
+
+[tool.coverage.run]
+branch = true
+source = ["src"]  
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.mypy]
+python_version = "3.11"  
+warn_unused_configs = true
+show_error_context = true
+pretty = true
+namespace_packages = true
+check_untyped_defs = true
+explicit_package_bases = true  
+mypy_path = "src" 
+exclude = [
+    '\.venv',
+    '\.tox',
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "N",   # pep8-naming
+]
+ignore = []

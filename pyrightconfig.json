@@ -1,0 +1,19 @@
+{
+    "pythonVersion": "3.11",
+    "venvPath": ".",
+    "venv": ".venv",
+    "extraPaths": [
+        "src",
+        "./src"
+    ],
+    "include": ["src", "test"],
+    "exclude": [
+        ".tox", 
+        ".venv", 
+        "**/__pycache__",
+        "**/node_modules",
+        "**/.git",
+        "**/.mypy_cache",
+        "**/.*"
+    ]
+}

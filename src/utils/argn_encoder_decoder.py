@@ -18,7 +18,8 @@ from dataclasses import dataclass
 
 import re
 
-from typing import Protocol
+from typing import Protocol, Any, Sequence
+from numpy.typing import NDArray
 
 import warnings
 import logging
@@ -45,7 +46,7 @@ class encoding_decoding_engine_protocol(Protocol):
     # Not fully implemented
 
 
-def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_cols:list[str]):
+def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[str,dict[str,int]],cat_cols:list[str]):
     """
     Assumes a polars data frame and transform the categorical columns into integer levels.
 
@@ -55,7 +56,7 @@ def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_co
     df_pl : pl.DataFrame
         A polars data frame with categorical data encoded as strings
     
-    encode_map : dict[dict[str,int]] 
+    encode_map : dict[str,dict[str,int]] 
         A dict of dicts with encoding mapping of string levels into integer levels
     
     cat_cols : list[str]
@@ -81,7 +82,7 @@ def encode_categorical(df_pl:pl.DataFrame, encode_map:dict[dict[str,int]],cat_co
     return df_pl_encoded
 
 
-def decode_categorical(df_pl:pl.DataFrame, decode_map:dict[dict[int, str]], cat_cols:list[str]):
+def decode_categorical(df_pl:pl.DataFrame, decode_map:dict[str,dict[str,int]], cat_cols:list[str]):
     """
     Assumes a polars data frame and transform the encoded data in categorical columns 
     back into string levels.
@@ -92,7 +93,7 @@ def decode_categorical(df_pl:pl.DataFrame, decode_map:dict[dict[int, str]], cat_
     df_pl : pl.DataFrame
         A polars data frame with categorical data encoded as strings
     
-    decode_map : dict[dict[int, str]] 
+    decode_map : dict[str,dict[str,int]] 
         A dict of dicts with decoding mapping of integer levels into string levels
         -----
         Outer key: column name
@@ -125,7 +126,7 @@ def decode_categorical(df_pl:pl.DataFrame, decode_map:dict[dict[int, str]], cat_
     return df_pl_encoded
 
 
-def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tuple[str,int]], nrow:int) -> dict[dict[str,int]]:
+def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tuple[str,int]], nrow:int) -> dict[str,dict[str,int]]:
     """
     Creates a mapping for encoding categorical variables. Assumes columns with string data types are categorical variables
     coded with levels as strings.
@@ -145,7 +146,7 @@ def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tu
     Returns:
     -------
 
-    categorical_encode_maps : dict[dict[str,int]]
+    categorical_encode_maps : dict[str,dict[str,int]]
         A dictionary with dictionaries that map uniques levels to integers
 
     Warns:
@@ -175,7 +176,7 @@ def generate_categorical_encoding_mappings(df_pl:pl.DataFrame, cat_cols: list[tu
     return categorical_encode_maps
 
 
-def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> dict[dict[int,str]]:
+def generate_categorical_decoding_mappings(encode_maps: dict[str,dict[str,int]]) -> dict[str,dict[int,str]]:
     """
     Assumes a mapping for encoding categorical variables. Returns a mapping for decoding categorical
     variables back into strings 
@@ -183,13 +184,13 @@ def generate_categorical_decoding_mappings(encode_maps: dict[dict[str,int]]) -> 
     Parameters:
     ----------
 
-    encode_maps : dict[dict[str,int]]
+    encode_maps : dict[str,dict[str,int]]
         An encoding map generated with generate_categorical_encoding_mappings()
 
     returns:
     -------
 
-    decode_map : dict[dict[int,str]]
+    decode_map : dict[str,dict[int,str]]
         A decoding map to restore encoded data back into its original form
     """
 
@@ -228,7 +229,7 @@ def discrete_float_into_int(df_pl: pl.DataFrame, columns_to_fix: list[tuple[str,
     return df_pl
 
 
-def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_cols: list[tuple[str,int]]) -> dict[dict[int,int]]:
+def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_cols: list[tuple[str,int]]) -> dict[str,dict[int,int]]:
     """
     Creates a mapping for encoding numerical discrete variables. 
 
@@ -245,7 +246,7 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     Returns:
     -------
 
-    categorical_encoding_maps : dict[dict[int,int]]
+    categorical_encoding_maps : dict[str,dict[int,int]]
         A dictionary with dictionaries that map uniques levels to integers
     """
     
@@ -263,7 +264,7 @@ def generate_numerical_discrete_encoding_mappings(df_pl:pl.DataFrame, discrete_c
     return numerical_discrete_encodng_maps
 
 
-def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[int,int]]) -> dict[dict[int,int]]:
+def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[str,dict[int,int]]) -> dict[str,dict[int,int]]:
     """
     Assumes a mapping for encoding numerical discrete variables. Returns a mapping for decoding numerical
     discrete variables back into integers 
@@ -271,13 +272,13 @@ def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[int,int
     Parameters:
     ----------
 
-    encoding_maps : dict[dict[str,int]]
+    encoding_maps : dict[str,dict[str,int]]
         An encoding map generated with generate_numerical_discrete_encoding_mappings()
 
     returns:
     -------
 
-    decoding_map : dict[dict[int,int]]
+    decoding_map : dict[str,dict[int,int]]
         A decoding map to restore encoded data back into its original form
     """
 
@@ -289,7 +290,7 @@ def generate_numeric_discrete_decoding_mappings(encoding_maps: dict[dict[int,int
     return decoding_map
 
 
-def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[int,int]], discrete_cols:list[str]) -> pl.DataFrame:
+def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[str,dict[int,int]], discrete_cols:list[str]) -> pl.DataFrame:
     """
     Assumes a polars data frame and transform the numerical discrete columns into integer levels.
 
@@ -299,7 +300,7 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[int,int
     df_pl : pl.DataFrame
         A polars data frame with categorical data encoded as strings
     
-    encoding_map : dict[dict[int,int]] 
+    encoding_map : dict[str,dict[int,int]] 
         A dict of dicts with encoding mapping of discrete values into integer levels
     
     cat_cols : list[str]
@@ -326,7 +327,7 @@ def encode_numerical_discrete(df_pl:pl.DataFrame, encoding_map:dict[dict[int,int
     return df_pl_encoded
 
 
-def decode_numerical_discrete(df_pl:pl.DataFrame, decode_map:dict[dict[int, int]], discrete_cols:list[str]):
+def decode_numerical_discrete(df_pl:pl.DataFrame, decode_map:dict[str,dict[int, int]], discrete_cols:list[str]):
     """
     Assumes a polars data frame and transform the encoded data in numerical discrete columns 
     back into integer levels.
@@ -337,7 +338,7 @@ def decode_numerical_discrete(df_pl:pl.DataFrame, decode_map:dict[dict[int, int]
     df_pl : pl.DataFrame
         A polars data frame with numerical integers (like ZIP codes) data encoded as integer levels
     
-    decode_map : dict[dict[int, int]] 
+    decode_map : dict[str,dict[int, int]] 
         A dict of dicts with decoding mapping of integer levels back into numerical integers 
         -----
         Outer key: column name
@@ -388,7 +389,7 @@ class BinDesign:
         Percentile-based bin edge values, length = n_bins + 1
     """
     n_bins: int
-    edges: list[float]
+    edges: NDArray[np.floating[Any]]
 
 
 def get_bin_designs(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> dict[str,BinDesign]:
@@ -443,7 +444,7 @@ def get_bin_designs(df_pl: pl.DataFrame, float_cols: list[tuple[str,int]]) -> di
 
 def generate_numerical_binned_encoding_mappings(
         binned_cols: list[tuple[str,int]], 
-        bin_designs: dict[str,BinDesign]) -> dict[dict[tuple[float,float], int]]:
+        bin_designs: dict[str,BinDesign]) -> dict[str,dict[tuple[float,float] | None, int]]:
     """
     Creates a mapping for encoding collumns following the numerical binned strategy. 
 
@@ -465,7 +466,7 @@ def generate_numerical_binned_encoding_mappings(
     Returns:
     -------
 
-    categorical_encoding_maps : dict[dict[tuple[float,float], int]]
+    categorical_encoding_maps : dict[str,dict[tuple[float,float], int]]
         A dictionary containing dictionaries that map intervals to integers.
         Outer key: column name
         Inner dict: maps (lower_edge, upper_edge) tuples to int category index
@@ -518,7 +519,7 @@ def generate_numerical_binned_encoding_mappings(
     return numerical_binned_encoding_maps
 
 
-def generate_numeric_binned_decoding_mappings(encoding_maps: dict[dict[tuple[float,float], int]]) -> dict[dict[int, tuple[float,float]]]:
+def generate_numeric_binned_decoding_mappings(encoding_maps: dict[str,dict[tuple[float,float] | None, int]]) -> dict[str,dict[int, tuple[float,float] | None]]:
     """
     Assumes a mapping for encoding columns with the BINNED strategy. Returns a mapping for decoding numerical
     binned variables back into bins with float edges 
@@ -526,13 +527,13 @@ def generate_numeric_binned_decoding_mappings(encoding_maps: dict[dict[tuple[flo
     Parameters:
     ----------
 
-    encoding_maps : dict[dict[tuple[float,float], int]]
+    encoding_maps : dict[str,dict[tuple[float,float], int]]
         An encoding map generated with generate_numerical_binned_encoding_mappings()
 
     returns:
     -------
 
-    decoding_map : dict[dict[int, tuple[float,float]]]
+    decoding_map : dict[str,dict[int, tuple[float,float]]]
         A decoding map to restore encoded data back into its intermediate form.
         Outer key: column name
         Inner dict: maps integer level back to (lower_edge, upper_edge) tuples 
@@ -547,7 +548,7 @@ def generate_numeric_binned_decoding_mappings(encoding_maps: dict[dict[tuple[flo
     return decoding_map
 
 
-def find_bin(num_to_bin: float, edges: list[float]) -> tuple[float,float] | None:
+def find_bin(num_to_bin: float, edges: NDArray[np.floating[Any]] ) -> tuple[float,float] | None:
     """
     Heper function to find the bin to sort a given number using binary search
 
@@ -589,7 +590,7 @@ def find_bin(num_to_bin: float, edges: list[float]) -> tuple[float,float] | None
 
 def encode_numerical_binned(
         df_pl:pl.DataFrame, 
-        encoding_map:dict[dict[tuple[float,float],int]], 
+        encoding_map:dict[str,dict[tuple[float,float] | None,int]], 
         binned_cols:list[str], 
         bin_designs: dict[str,BinDesign]) -> pl.DataFrame:
     """
@@ -602,7 +603,7 @@ def encode_numerical_binned(
     df_pl : pl.DataFrame
         A polars data frame with float columns to be encoded using the BINNED strategy
     
-    encoding_map : dict[dict[tuple[float,float],int]]
+    encoding_map : dict[str,dict[tuple[float,float],int]]
         A dict of dicts with the encoding mapping for each column that follow the
         BINNED strategy. The mappig uses the key of the inner dict to first bin 
         float values and then map them into aninteger level.
@@ -634,7 +635,8 @@ def encode_numerical_binned(
             pl.col(col_name)
             .map_elements(
                 lambda x, edges = curr_col_edges, col_map = curr_col_mapping: (
-                    col_map[find_bin(x, edges)]
+                    col_map[None] if x is None
+                    else col_map[find_bin(x, edges)]
                 ),
                 return_dtype = pl.Int64 
             )
@@ -646,7 +648,7 @@ def encode_numerical_binned(
 
 def decode_numerical_binned(
         df_pl:pl.DataFrame, 
-        decoding_map:dict[dict[int, tuple[float,float]]], 
+        decoding_map:dict[str,dict[int, tuple[float,float]]], 
         binned_cols:list[str]) -> pl.DataFrame:
     """
     Assumes a polars data frame and applies a transformation to the generated values in
@@ -658,7 +660,7 @@ def decode_numerical_binned(
     df_pl : pl.DataFrame
         A polars data frame with float columns to be encoded using the BINNED strategy
     
-    decoding_map : dict[dict[int, tuple[float,float]]]
+    decoding_map : dict[str,dict[int, tuple[float,float]]]
         A dict of dicts with the decoding mapping for each column that followed the
         BINNED strategy. The mappig uses the key of the inner dict to map the integer 
         levels into a tupple with a lower and upper bound.
@@ -700,7 +702,7 @@ def decode_numerical_binned(
     return df_pl_encoded
 
 
-def pad_numeric_digit_col(string_numbers: list[str], max_len: int, direction: str) -> list[str]:
+def pad_numeric_digit_col(string_numbers: Sequence[str | None], max_len: int, direction: str) -> list[str]:
    """
    Assumes a list of numbers casted into strings and returns a list of string 
    containing the same numbers bud padded with zeros on the left for digits
@@ -709,7 +711,7 @@ def pad_numeric_digit_col(string_numbers: list[str], max_len: int, direction: st
    Parameters:
    ----------
 
-   string_numbers : list[str]
+   string_numbers : Sequence[str | None]
         A list of numbers casted as strings to process
    max_len : int
         The maximun length of the string numbers. The every string number in 
@@ -828,10 +830,12 @@ def generate_sub_column_values(df_pl: pl.DataFrame, col_name: str) -> tuple[int,
         ] 
 
     # Separating digints from decimals in two distinct lists
-    digits_in_numbers, decimals_in_numbers = zip(*[
+    digits_in_numbers, decimals_in_numbers = (
+        list(x) for x in zip(*[
         tuple(item.split(".")) if item is not None else (None,None)
         for item in col_vals_as_strings
         ])
+    )
 
     # Claeaning trailing zeroes introduced in decimals by the f-string method
     decimals_in_numbers = [

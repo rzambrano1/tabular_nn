@@ -58,7 +58,7 @@ class TabularDatasetProtocol(Protocol):
 
     _raw_data: pd.DataFrame
     
-    def load_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    def load_data(self, df_pd: pd.DataFrame) -> pl.DataFrame:
         ...
 
 
@@ -175,7 +175,7 @@ class ArgnDataset(TabularDatasetProtocol):
 
     # --- Encoding Maps ---
 
-    self.categorical_encoding_maps : dict[dict[str,int]]
+    self.categorical_encoding_maps : dict[str,dict[str,int]]
         A dictionary with dictionaries that map uniques levels 
         to integers
 
@@ -422,12 +422,12 @@ class ArgnDataset(TabularDatasetProtocol):
     def argn_preprocessing(
             self, 
             df_pl: pl.DataFrame,
-            cat_encoding_map: dict[dict[str,int]], 
+            cat_encoding_map: dict[str,dict[str,int]], 
             cat_cols: list[tuple[str,int]],
             float_to_int_cols: list[tuple[str,int]],
-            num_discrete_encoding: dict[dict[str,int]],
+            num_discrete_encoding: dict[str,dict[int,int]],
             numerical_discrete_cols: list[tuple[str,int]],
-            num_binned_encoding: dict[dict[str,int]],
+            num_binned_encoding: dict[str, dict[tuple[float, float] | None, int]],
             numerical_binned_cols: list[tuple[str,int]],
             binned_strategy_design: dict[str,BinDesign],
             numerical_digit_cols: list[tuple[str,int]],
@@ -452,17 +452,17 @@ class ArgnDataset(TabularDatasetProtocol):
 
         df_pl : pl.DataFrame
             A polars data frame
-        cat_encoding_map : dict[dict[str,int]]
+        cat_encoding_map : dict[str,dict[str,int]]
             Mapping to encode string levels as integer levels of categorical variables
         cat_cols : list[str]
             A list of columns with categorical variables coded as strings
         float_to_int_cols:list[tuple[str,int]],
             A list of columns with float values that should be discrete values
-        num_discrete_encoding: dict[dict[str,int]]
+        num_discrete_encoding: dict[str,dict[str,int]]
             Encoding mappings for numerical discrete columns
         numerical_discrete_cols:list[tuple[str,int]]
             A list of columns with numerical discrete values
-        num_binned_encoding: dict[dict[str,int]]
+        num_binned_encoding: dict[str,dict[str,int]]
             Encoding maps for columns encoded using the BINNED strategy
         numerical_binned_cols: list[tuple[str,int]]
             A list of the columns following the BINNED strategy
@@ -549,10 +549,10 @@ class ArgnDataset(TabularDatasetProtocol):
     
 
     def __repr__(self):
-        ...
+        return f"ArgnDataset(original_shape={self.table_dim}) - transformed_shape={self._table.shape}"
 
     def __str__(self):
-        ...
+        raise NotImplementedError
 
     def __eq__(self,other):
         """
@@ -561,7 +561,7 @@ class ArgnDataset(TabularDatasetProtocol):
         """
         return (
             self._raw_data.equals(other._raw_data) and
-            self._table.frame_equal(other._table)
+            self._table.equals(other._table)
         )
 
     def __len__(self):
