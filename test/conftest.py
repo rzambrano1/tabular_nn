@@ -7,18 +7,8 @@ Shared test fixtures
 # -------------------
 
 
-import pytest
-
-import os
-import sys
-import subprocess
-import time
-import shutil
-import tempfile
-
 import polars as pl
-import pandas as pd
-import numpy as np
+import pytest
 
 # Model Modules
 # -------------
@@ -28,24 +18,23 @@ import numpy as np
 # Fixture Definitions
 # -------------------
 
+
 @pytest.fixture(scope="session")
 def categorical_table():
-    cat_df = pl.DataFrame([
-        {'sex': 'Male', 'region': 'Northeast', 'educ': 'Associate Degree'},
-        {'sex': 'Female', 'region': 'South', 'educ': 'High School'},
-        {'sex': 'Female', 'region': 'Midwest', 'educ': "Bachelor's Degree"},
-        {'sex': 'Female', 'region': 'South', 'educ': 'Doctorate'},
-        {'sex': 'Male', 'region': 'West', 'educ': "Master's Degree"}
-        ])
-    
-    cat_cols = [('sex',0),('region',1),('educ',2)]
-    
+    cat_df = pl.DataFrame(
+        [
+            {"sex": "Male", "region": "Northeast", "educ": "Associate Degree"},
+            {"sex": "Female", "region": "South", "educ": "High School"},
+            {"sex": "Female", "region": "Midwest", "educ": "Bachelor's Degree"},
+            {"sex": "Female", "region": "South", "educ": "Doctorate"},
+            {"sex": "Male", "region": "West", "educ": "Master's Degree"},
+        ]
+    )
+
+    cat_cols = [("sex", 0), ("region", 1), ("educ", 2)]
+
     return cat_df, cat_cols
-
-
-
 
 
 # Helper Functions
 # ----------------
-

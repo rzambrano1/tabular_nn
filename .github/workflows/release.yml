@@ -1,0 +1,23 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4          # v3 is outdated, using v4
+    - name: Create Release
+      uses: softprops/action-gh-release@v2  # v1 is outdated, using v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        generate_release_notes: true
+        body: |
+          ## Changes in this release
+          See the [CHANGELOG](CHANGELOG.md) for details.
+        draft: false
+        prerelease: false

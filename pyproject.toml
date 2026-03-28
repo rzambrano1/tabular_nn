@@ -22,6 +22,7 @@ dev = [
     "black",
     "ruff",
     "mypy",
+    "pandas-stubs",
 ]
 
 [tool.setuptools]

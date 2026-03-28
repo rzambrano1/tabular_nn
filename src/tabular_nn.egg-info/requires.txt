@@ -6,3 +6,4 @@ tox
 black
 ruff
 mypy
+pandas-stubs
