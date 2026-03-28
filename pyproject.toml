@@ -37,7 +37,7 @@ namespaces = true
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 addopts = [
-    "--cov", 
+    "--cov=tabular_nn", 
     "--strict-markers",   # makes pytest fail if you use an undefined marker
     "-v",                 # add verbose output
     # "--setup-show",     # add fixture setup/teardown info

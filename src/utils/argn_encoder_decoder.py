@@ -99,7 +99,7 @@ def decode_categorical(
     -------
 
     df_pl_encoded : pl.DataFrame
-        A polars data frame with categorical variables encoded as integers
+        A polars data frame with categorical variables decoded back into strings
 
     """
 

@@ -622,7 +622,7 @@ class ArgnDataset(TabularDatasetProtocol):
         return f"ArgnDataset(original_shape={self.table_dim}) - transformed_shape={self._table.shape}"
 
     def __str__(self):
-        raise NotImplementedError
+        return self.__repr__()
 
     def __eq__(self, other):
         """
